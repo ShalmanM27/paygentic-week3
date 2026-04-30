@@ -1,0 +1,36 @@
+{
+  "name": "credit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CREDIT — agent-to-agent lending on Locus (Paygentic Week 3)",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "dev:credit": "pnpm --filter @credit/credit-agent dev",
+    "dev:a": "pnpm --filter @credit/borrower-a dev",
+    "dev:b": "pnpm --filter @credit/borrower-b dev",
+    "dev:customer": "pnpm --filter @credit/customer-agent dev",
+    "dev:web": "pnpm --filter @credit/frontend dev",
+    "dev:all": "concurrently -n credit,a,b,cust,web -c blue,green,yellow,magenta,cyan \"pnpm dev:credit\" \"pnpm dev:a\" \"pnpm dev:b\" \"pnpm dev:customer\" \"pnpm dev:web\"",
+    "demo": "tsx packages/credit-agent/scripts/demo-runner.ts",
+    "smoke:locus": "tsx packages/shared/scripts/smoke-locus.ts",
+    "seed:wallets": "tsx packages/shared/scripts/seed-wallets.ts",
+    "_": "smoke:pay archived 2026-04-30 — see smoke-pay.ts header and CLAUDE.md decision block",
+    "smoke:webhook": "tsx packages/shared/scripts/smoke-webhook.ts",
+    "test:credit-flow": "tsx packages/credit-agent/scripts/test-credit-flow.ts",
+    "test:webhook-flow": "tsx packages/credit-agent/scripts/test-webhook-flow.ts",
+    "test:loops": "tsx packages/credit-agent/scripts/test-loops.ts",
+    "test:borrow-flow": "tsx packages/borrower/scripts/test-borrow-flow.ts",
+    "test:e2e-loop": "tsx packages/credit-agent/scripts/test-e2e-loop.ts",
+    "test:frontend-routes": "tsx packages/credit-agent/scripts/test-frontend-routes.ts",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "concurrently": "^8.2.2",
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5"
+  }
+}
