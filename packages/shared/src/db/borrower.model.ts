@@ -8,7 +8,9 @@ export type BorrowerStatus = (typeof BORROWER_STATUSES)[number];
 const borrowerSchema = new Schema(
   {
     borrowerId: { type: String, required: true, unique: true, index: true },
-    walletAddress: { type: String, required: true, unique: true, index: true },
+    // NOT unique — multiple agents can share a Locus wallet (one party
+    // hosts many agents). Indexed for query speed only.
+    walletAddress: { type: String, required: true, index: true },
     apiKey: { type: String, required: true },
     serviceUrl: { type: String, required: true },
     status: {
@@ -25,6 +27,16 @@ const borrowerSchema = new Schema(
   },
   { timestamps: { createdAt: false, updatedAt: "updatedAt" }, collection: "borrowers" },
 );
+
+// Virtual `agentId` — same value as `borrowerId`. The DB schema field stays
+// `borrowerId` for stability across the X1 rename; surfaces (frontend, API
+// responses where appropriate) prefer `agentId`. To include in lean()
+// queries: pass `{ virtuals: true }`.
+borrowerSchema.virtual("agentId").get(function () {
+  return (this as unknown as { borrowerId: string }).borrowerId;
+});
+borrowerSchema.set("toJSON", { virtuals: true });
+borrowerSchema.set("toObject", { virtuals: true });
 
 export type Borrower = InferSchemaType<typeof borrowerSchema>;
 export const BorrowerModel: Model<Borrower> =

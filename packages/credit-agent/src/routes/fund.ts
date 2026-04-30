@@ -47,7 +47,7 @@ export async function fundRoute(
           .code(400)
           .send({ error: "decision_token_invalid", reason: verified.reason });
       }
-      const { borrowerId, amount, rate, ttlSeconds } = verified.payload;
+      const { borrowerId, amount, rate, ttlSeconds, taskId } = verified.payload;
 
       const borrower = await BorrowerModel.findOne({ borrowerId });
       if (!borrower) {
@@ -157,6 +157,7 @@ export async function fundRoute(
         disbursementTxHash: txHash,
         repaymentSessionId,
         repaymentTxHash: null,
+        linkedTaskId: taskId ?? null,
         status: "FUNDED",
         createdAt: now,
         fundedAt: now,
@@ -204,6 +205,7 @@ export async function fundRoute(
         txHash,
         targetSessionId,
         repaymentSessionId,
+        linkedTaskId: taskId ?? null,
       });
 
       req.log.info({ loanId, borrowerId, amount, repayAmt }, "loan funded");

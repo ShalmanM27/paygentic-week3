@@ -22,6 +22,8 @@ export type SseEvent =
       txHash: string | null;
       targetSessionId: string;
       repaymentSessionId: string;
+      /** Set when the loan was drawn to fulfill an escrow-flow task. */
+      linkedTaskId: string | null;
     }
   | {
       kind: "loan.repaid";
@@ -29,6 +31,7 @@ export type SseEvent =
       loanId: string;
       borrowerId: string;
       txHash: string | null;
+      linkedTaskId: string | null;
     }
   | {
       kind: "loan.defaulted";
@@ -36,6 +39,7 @@ export type SseEvent =
       loanId: string;
       borrowerId: string;
       reason: string;
+      linkedTaskId: string | null;
     }
   | {
       kind: "score.changed";
@@ -68,7 +72,48 @@ export type SseEvent =
       kind: "system.heartbeat";
       ts: number;
       uptimeSec: number;
-    };
+    }
+  // ── Escrow-task lifecycle events (Phase X2) ─────────────────────────
+  | { kind: "task.created"; ts: number; taskId: string; agentId: string; pricingUsdc: number }
+  | { kind: "task.escrow_paid"; ts: number; taskId: string; agentId: string; txHash: string | null }
+  | { kind: "task.dispatched"; ts: number; taskId: string; agentId: string }
+  | { kind: "task.processing"; ts: number; taskId: string; agentId: string }
+  | { kind: "task.borrowing"; ts: number; taskId: string; agentId: string }
+  | { kind: "task.borrowed"; ts: number; taskId: string; agentId: string; loanId: string }
+  | {
+      kind: "task.delivered";
+      ts: number;
+      taskId: string;
+      agentId: string;
+      modelUsed: string | null;
+      charsOutput: number;
+    }
+  | {
+      kind: "task.released";
+      ts: number;
+      taskId: string;
+      agentId: string;
+      releaseTxHash: string | null;
+    }
+  | { kind: "task.failed"; ts: number; taskId: string; reason: string }
+  | { kind: "task.refunded"; ts: number; taskId: string; refundExecuted: boolean }
+  | { kind: "task.expired"; ts: number; taskId: string }
+  // ── Agent registration / rent (Phase X4) ────────────────────────────
+  | {
+      kind: "agent.registered";
+      ts: number;
+      agentId: string;
+      operatorId: string;
+      subscriptionId: string;
+    }
+  | {
+      kind: "agent.activated";
+      ts: number;
+      agentId: string;
+      subscriptionId: string;
+      coverageEndAt: string;
+    }
+  | { kind: "subscription.expired"; ts: number; subscriptionId: string };
 
 export const sseBus = new EventEmitter();
 sseBus.setMaxListeners(100);

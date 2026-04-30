@@ -14,18 +14,23 @@ import { rememberJob } from "../lib/job-store.js";
 import { processJob } from "../lib/process-job.js";
 import type { CreditClient } from "../lib/credit-client.js";
 
+// Accepts either `input` (new agent-task shape) or `url` (legacy customer-
+// agent's /trigger which still sends `url` as the input string). One of the
+// two is required.
 const bodySchema = {
   type: "object",
-  required: ["url"],
   additionalProperties: false,
   properties: {
+    input: { type: "string", minLength: 1 },
     url: { type: "string", minLength: 1 },
     callbackUrl: { type: "string", minLength: 1 },
   },
+  oneOf: [{ required: ["input"] }, { required: ["url"] }],
 } as const;
 
 interface WorkBody {
-  url: string;
+  input?: string;
+  url?: string;
   callbackUrl?: string;
 }
 
@@ -39,35 +44,37 @@ export async function workRoute(
     "/work",
     { schema: { body: bodySchema } },
     async (req, reply) => {
-      const { url, callbackUrl } = req.body;
+      const userInput = req.body.input ?? req.body.url ?? "";
+      const callbackUrl = req.body.callbackUrl;
+      const description = `${config.agentName} task`;
       const session = await locus.createSession({
         amount: String(config.workPrice),
         currency: "USDC",
         receiptConfig: {
           enabled: true,
           fields: {
-            creditorName: config.borrowerId,
+            creditorName: config.agentName,
             lineItems: [
-              { description: `Scrape ${url}`, amount: String(config.workPrice) },
+              { description, amount: String(config.workPrice) },
             ],
           },
         },
         metadata: {
-          kind: "borrower-work",
-          borrowerId: config.borrowerId,
-          url,
+          kind: "agent-work",
+          agentId: config.agentId,
+          inputPreview: userInput.slice(0, 80),
         },
         ttlSeconds: 600,
       });
       rememberJob({
         sessionId: session.id,
-        url,
+        input: userInput,
         callbackUrl: callbackUrl ?? "",
         amount: config.workPrice,
         createdAt: new Date(),
       });
       req.log.info(
-        { sessionId: session.id, url },
+        { sessionId: session.id, agentId: config.agentId },
         "work: session created (402)",
       );
 
@@ -106,9 +113,9 @@ export async function workRoute(
         checkoutUrl: session.checkoutUrl ?? null,
         amount: config.workPrice,
         currency: "USDC",
-        lineItems: [
-          { description: `Scrape ${url}`, amount: String(config.workPrice) },
-        ],
+        agentId: config.agentId,
+        agentName: config.agentName,
+        lineItems: [{ description, amount: String(config.workPrice) }],
       });
     },
   );

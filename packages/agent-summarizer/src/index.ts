@@ -1,4 +1,5 @@
-// Thin entry: load .env, build the shared borrower server, register, listen.
+// agent-summarizer — thin entry. Loads .env, builds config, registers
+// with Credit, listens. Shares wallet (LOCUS_API_KEY) with agent-code-writer.
 
 import { config as loadDotenv } from "dotenv";
 import { dirname, resolve } from "node:path";
@@ -7,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   buildBorrowerServer,
   registerWithCredit,
+  systemPromptFor,
   type BorrowerConfig,
 } from "@credit/borrower";
 
@@ -20,17 +22,26 @@ function req(name: string): string {
 }
 
 async function main(): Promise<void> {
+  const agentId = req("AGENT_ID");
   const config: BorrowerConfig = {
-    port: Number(process.env.PORT ?? "4002"),
-    borrowerId: req("BORROWER_ID"),
+    port: Number(process.env.PORT ?? "4001"),
+    agentId,
+    agentName: req("AGENT_NAME"),
+    agentDescription: req("AGENT_DESCRIPTION"),
+    geminiModel: req("AGENT_GEMINI_MODEL"),
+    geminiApiKey: process.env.GEMINI_API_KEY ?? "",
+    geminiApiBase:
+      process.env.GEMINI_API_BASE ??
+      "https://generativelanguage.googleapis.com/v1beta",
+    systemPrompt: systemPromptFor(agentId),
     locusApiKey: req("LOCUS_API_KEY"),
     locusApiBase:
       process.env.LOCUS_API_BASE ?? "https://beta-api.paywithlocus.com/api",
     locusWebhookSecret: req("LOCUS_WEBHOOK_SECRET"),
     locusOfflineMode: process.env.LOCUS_OFFLINE_MODE === "1",
     mockBalance: process.env.LOCUS_MOCK_BALANCE,
-    workPrice: Number(req("WORK_PRICE")),
-    workCost: Number(req("WORK_COST")),
+    workPrice: Number(req("AGENT_PRICING_USDC")),
+    workCost: Number(req("AGENT_WORK_COST_USDC")),
     safetyBuffer: Number(req("SAFETY_BUFFER")),
     creditAgentUrl: req("CREDIT_AGENT_URL"),
   };
@@ -46,8 +57,9 @@ async function main(): Promise<void> {
   }
 
   app.log.info(
-    `borrower-b (${config.borrowerId}) listening on http://localhost:${config.port} ` +
-      `(locus mode: ${config.locusOfflineMode ? "offline/mock" : "live/beta"})`,
+    `${config.agentName} (${config.agentId}) on http://localhost:${config.port} ` +
+      `(locus mode: ${config.locusOfflineMode ? "offline/mock" : "live/beta"}, ` +
+      `model: ${config.geminiModel})`,
   );
 }
 

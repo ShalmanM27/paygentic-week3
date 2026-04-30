@@ -2,9 +2,11 @@
 // Captures rawBody for HMAC verification.
 
 import Fastify, { type FastifyInstance } from "fastify";
+import cors from "@fastify/cors";
 import { createLocusClient, type LocusClientLike } from "@credit/shared";
 import { CreditClient } from "./lib/credit-client.js";
 import { workRoute } from "./routes/work.js";
+import { workWithInputRoute } from "./routes/work-with-input.js";
 import { webhooksRoute } from "./routes/webhooks.js";
 
 declare module "fastify" {
@@ -15,7 +17,22 @@ declare module "fastify" {
 
 export interface BorrowerConfig {
   port: number;
-  borrowerId: string;
+  /** Stable identifier (was borrowerId pre-X1). Sent as `borrowerId` over
+   *  the wire to credit-agent for DB compatibility. */
+  agentId: string;
+  /** Display name surfaced to customers. */
+  agentName: string;
+  /** One-line marketing description. */
+  agentDescription: string;
+  /** Gemini model id used by do-work for LLM calls. */
+  geminiModel: string;
+  /** Google AI Studio API key (free tier). Required in live mode only;
+   *  ignored when locusOfflineMode=true. */
+  geminiApiKey: string;
+  /** Base URL for Google AI Studio's generative API. */
+  geminiApiBase: string;
+  /** Role-specific system prompt prepended to every LLM call. */
+  systemPrompt: string;
   locusApiKey: string;
   locusApiBase: string;
   locusWebhookSecret: string;
@@ -47,6 +64,15 @@ export async function buildBorrowerServer(
               options: { colorize: true, translateTime: "HH:MM:ss" },
             },
     },
+  });
+
+  // CORS — frontend (port 3000) hits each borrower's /healthz to colour
+  // the marketplace status pills. PayWithLocus checkout SDK also needs
+  // the borrower endpoints reachable from the browser.
+  await app.register(cors, {
+    origin: true,
+    credentials: false,
+    methods: ["GET", "POST", "OPTIONS"],
   });
 
   app.addContentTypeParser(
@@ -90,6 +116,7 @@ export async function buildBorrowerServer(
   app.get("/healthz", async () => ({ ok: true }));
 
   await workRoute(app, config, locus, credit);
+  await workWithInputRoute(app, config, locus, credit);
   await webhooksRoute(app, config, locus, credit);
 
   return { app, locus, credit };
@@ -105,8 +132,9 @@ export async function registerWithCredit(
   credit: CreditClient,
 ): Promise<{ ok: boolean; score: number; limit: number }> {
   const bal = await locus.balance();
+  // Wire field stays `borrowerId` for credit-agent DB compatibility.
   return credit.register({
-    borrowerId: config.borrowerId,
+    borrowerId: config.agentId,
     walletAddress: bal.wallet_address,
     serviceUrl: `http://localhost:${config.port}`,
     registrationApiKey: config.locusApiKey,

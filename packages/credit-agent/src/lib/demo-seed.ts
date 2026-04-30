@@ -12,8 +12,15 @@ export const DEMO_BORROWER_PRESETS: Record<
   string,
   { score: number; limit: number; mockBalance: string }
 > = {
-  "agent-a": { score: 750, limit: 0.05, mockBalance: "0.0010" },
-  "agent-b": { score: 550, limit: 0.02, mockBalance: "0.0010" },
+  // summarizer: SUFFICIENT balance — does work from its own wallet,
+  // no loan needed. Sidesteps the mock-settlement bug on escrow
+  // release: with no loan, no collection-watcher runs.
+  summarizer: { score: 750, limit: 0.05, mockBalance: "0.0200" },
+  // code-reviewer: starved by design — must borrow, then default.
+  // Drives the /flow default-path narrative.
+  "code-reviewer": { score: 550, limit: 0.02, mockBalance: "0.0005" },
+  // code-writer: SUFFICIENT (shares wallet with summarizer).
+  "code-writer": { score: 700, limit: 0.04, mockBalance: "0.0200" },
 };
 
 /** Hardcoded demo customer key — matches packages/credit-agent/scripts/demo-runner.ts. */

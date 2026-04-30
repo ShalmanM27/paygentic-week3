@@ -12,6 +12,7 @@ interface DrawBody {
   amount: number;
   purpose: string;
   ttl: number;
+  taskId?: string;
 }
 
 export async function drawRoute(
@@ -35,6 +36,7 @@ export async function drawRoute(
         minimum: 60,
         maximum: config.maxTtlSeconds,
       },
+      taskId: { type: "string", minLength: 1 },
     },
   };
 
@@ -42,7 +44,7 @@ export async function drawRoute(
     "/credit/draw",
     { schema: { body: bodySchema } },
     async (req, reply) => {
-      const { borrowerId, amount, purpose, ttl } = req.body;
+      const { borrowerId, amount, purpose, ttl, taskId } = req.body;
 
       if (amount < config.minLoanUsdc) {
         return reply.code(400).send({
@@ -88,7 +90,14 @@ export async function drawRoute(
       const dueAt = new Date(now + ttl * 1000).toISOString();
 
       const decisionToken = signDecision(
-        { borrowerId, amount, rate, ttlSeconds: ttl, expiresAt },
+        {
+          borrowerId,
+          amount,
+          rate,
+          ttlSeconds: ttl,
+          expiresAt,
+          ...(taskId ? { taskId } : {}),
+        },
         config.decisionTokenSecret,
       );
 

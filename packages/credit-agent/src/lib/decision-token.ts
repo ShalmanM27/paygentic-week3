@@ -11,6 +11,8 @@ export interface DecisionPayload {
   ttlSeconds: number;
   /** ISO timestamp string. Token rejected after this instant. */
   expiresAt: string;
+  /** Optional escrow-task association — set when borrower draws to cover a task. */
+  taskId?: string;
 }
 
 function b64urlEncode(buf: Buffer): string {

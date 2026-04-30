@@ -146,7 +146,13 @@ async function main(): Promise<void> {
   step("boot borrower-a");
   const borrowerConfig = {
     port: BORROWER_PORT,
-    borrowerId: BORROWER_ID,
+    agentId: BORROWER_ID,
+    agentName: BORROWER_ID,
+    agentDescription: "test agent",
+    geminiModel: "gemini-1.5-flash",
+    geminiApiKey: "",
+    geminiApiBase: "https://generativelanguage.googleapis.com/v1beta",
+    systemPrompt: "test system prompt",
     locusApiKey: BORROWER_KEY,
     locusApiBase: cfg.locusApiBase,
     locusWebhookSecret: BORROWER_WEBHOOK_SECRET,

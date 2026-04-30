@@ -5,3 +5,7 @@ export * from "./score-event.model.js";
 export * from "./transaction.model.js";
 export * from "./repayment-queue.model.js";
 export * from "./score-report.model.js";
+export * from "./task.model.js";
+export * from "./counter.model.js";
+export * from "./agent.model.js";
+export * from "./agent-subscription.model.js";

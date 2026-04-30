@@ -29,11 +29,13 @@ process.env.DEFAULT_LOOP_INTERVAL_SECONDS =
   process.env.DEFAULT_LOOP_INTERVAL_SECONDS ?? "5";
 process.env.DEFAULT_GRACE_SECONDS = process.env.DEFAULT_GRACE_SECONDS ?? "10";
 process.env.REPAYMENT_FIRST_ATTEMPT_DELAY_SECONDS =
-  process.env.REPAYMENT_FIRST_ATTEMPT_DELAY_SECONDS ?? "3";
+  process.env.REPAYMENT_FIRST_ATTEMPT_DELAY_SECONDS ?? "2";
+// Demo cadence: 1 attempt only, no backoff. Default fires within
+// ~3-4s of loan funding for a snappy default-path demo.
 process.env.MAX_REPAYMENT_ATTEMPTS =
-  process.env.MAX_REPAYMENT_ATTEMPTS ?? "2";
+  process.env.MAX_REPAYMENT_ATTEMPTS ?? "1";
 process.env.REPAYMENT_BACKOFF_SECONDS =
-  process.env.REPAYMENT_BACKOFF_SECONDS ?? "3,6";
+  process.env.REPAYMENT_BACKOFF_SECONDS ?? "2";
 
 const { connect, disconnect } = await import("@credit/shared");
 
@@ -51,24 +53,30 @@ const { startDefaultLoop } = await import("../src/jobs/default-loop.js");
 const { startSettlementWatcher } = await import(
   "../src/jobs/settlement-watcher.js"
 );
-
-const { buildBorrowerServer, registerWithCredit } = await import(
-  "../../borrower/src/index.js"
+const { startEscrowWatcher } = await import("../src/jobs/escrow-watcher.js");
+const { startSubscriptionWatcher } = await import(
+  "../src/jobs/subscription-watcher.js"
 );
+
+const { buildBorrowerServer, registerWithCredit, systemPromptFor } =
+  await import("../../borrower/src/index.js");
 
 const { buildServer: buildCustomerServer } = await import(
   "../../customer-agent/src/server.js"
 );
 
 const CREDIT_PORT = 4000;
-const BORROWER_A_PORT = 4001;
-const BORROWER_B_PORT = 4002;
+const SUMMARIZER_PORT = 4001;
+const REVIEWER_PORT = 4002;
 const CUSTOMER_PORT = 4003;
+const WRITER_PORT = 4004;
 
-const BORROWER_A_KEY = "claw_dev_demo_a";
-const BORROWER_A_SECRET = "whsec_demo_a";
-const BORROWER_B_KEY = "claw_dev_demo_b";
-const BORROWER_B_SECRET = "whsec_demo_b";
+// summarizer + writer SHARE one wallet (one Locus account hosts two agents).
+// reviewer has its own.
+const SHARED_WALLET_KEY = "claw_dev_demo_a";
+const SHARED_WALLET_SECRET = "whsec_demo_a";
+const REVIEWER_KEY = "claw_dev_demo_b";
+const REVIEWER_SECRET = "whsec_demo_b";
 // Customer demo key is canonicalized in demo-seed.ts as DEMO_CUSTOMER_KEY.
 const CUSTOMER_KEY = DEMO_CUSTOMER_KEY;
 
@@ -81,6 +89,27 @@ async function main(): Promise<void> {
   const cfg = loadConfig();
   console.log(`mongo: ${cfg.mongoUri.replace(/:[^:@]+@/, ":***@")}`);
   await connect(cfg.mongoUri);
+
+  // Sync schema-defined indexes — important after the X1 rename which
+  // dropped walletAddress's unique constraint (multiple agents share
+  // wallets). Without this, the DB-side unique index lingers and blocks
+  // registration of the second agent on a shared wallet.
+  const { BorrowerModel, AgentModel, AgentSubscriptionModel } = await import(
+    "@credit/shared"
+  );
+  await BorrowerModel.syncIndexes();
+
+  // Clean slate on every demo boot:
+  // - operator-registered agents and all subscriptions wiped so the grid
+  //   starts tidy
+  // - tasks wiped so the mock session ID counter (resets to 1 on boot)
+  //   doesn't collide with stale tasks' unique escrowSessionId index
+  const { TaskModel } = await import("@credit/shared");
+  await Promise.all([
+    AgentModel.deleteMany({ isBuiltIn: { $ne: true } }),
+    AgentSubscriptionModel.deleteMany({}),
+    TaskModel.deleteMany({}),
+  ]);
 
   // Pre-registration mock balances (so /work's first balance() call
   // sees a tracked value). Final canonical seeding happens via
@@ -96,57 +125,88 @@ async function main(): Promise<void> {
   const score = startScoreRecomputeLoop({ logger: credit.log, config: cfg });
   const defaults = startDefaultLoop({ logger: credit.log, config: cfg });
   const settlement = startSettlementWatcher({ logger: credit.log, config: cfg });
+  const escrow = startEscrowWatcher({ logger: credit.log, config: cfg });
+  const subscription = startSubscriptionWatcher({
+    logger: credit.log,
+    config: cfg,
+  });
   console.log(
-    `    loops: collection=${cfg.collectionLoopIntervalSeconds}s · score=${cfg.scoreLoopIntervalSeconds}s · default=${cfg.defaultLoopIntervalSeconds}s`,
+    `    loops: collection=${cfg.collectionLoopIntervalSeconds}s · score=${cfg.scoreLoopIntervalSeconds}s · default=${cfg.defaultLoopIntervalSeconds}s · escrow=3s · subscription=${cfg.subscriptionWatcherIntervalSeconds}s`,
   );
 
-  // ── borrower-a ──────────────────────────────────────────────────────
-  const borrowerAConfig = {
-    port: BORROWER_A_PORT,
-    borrowerId: "agent-a",
-    locusApiKey: BORROWER_A_KEY,
+  const sharedAgentBase = {
     locusApiBase: cfg.locusApiBase,
-    locusWebhookSecret: BORROWER_A_SECRET,
     locusOfflineMode: true,
     workPrice: 0.005,
     workCost: 0.008,
     safetyBuffer: 0.001,
     creditAgentUrl: `http://localhost:${CREDIT_PORT}`,
+    geminiModel: "gemini-1.5-flash",
+    geminiApiKey: process.env.GEMINI_API_KEY ?? "",
+    geminiApiBase:
+      process.env.GEMINI_API_BASE ??
+      "https://generativelanguage.googleapis.com/v1beta",
   };
-  const borrowerA = await buildBorrowerServer(borrowerAConfig);
-  await borrowerA.app.listen({ port: BORROWER_A_PORT, host: "0.0.0.0" });
-  await registerWithCredit(borrowerAConfig, borrowerA.locus, borrowerA.credit);
-  console.log(`  ✓ borrower-a    → http://localhost:${BORROWER_A_PORT}`);
 
-  // ── borrower-b ──────────────────────────────────────────────────────
-  const borrowerBConfig = {
-    port: BORROWER_B_PORT,
-    borrowerId: "agent-b",
-    locusApiKey: BORROWER_B_KEY,
-    locusApiBase: cfg.locusApiBase,
-    locusWebhookSecret: BORROWER_B_SECRET,
-    locusOfflineMode: true,
-    // Loss-leader pricing: customer pays $0.001 but work costs $0.008.
-    // Borrower MUST borrow heavily; after work-cost drain, balance is
-    // below repayAmount — forces a default. The deadbeat's economics.
+  // ── agent-summarizer ────────────────────────────────────────────────
+  const summarizerConfig = {
+    ...sharedAgentBase,
+    port: SUMMARIZER_PORT,
+    agentId: "summarizer",
+    agentName: "Summarizer",
+    agentDescription: "Summarizes long documents into concise notes",
+    systemPrompt: systemPromptFor("summarizer"),
+    locusApiKey: SHARED_WALLET_KEY,
+    locusWebhookSecret: SHARED_WALLET_SECRET,
+  };
+  const summarizer = await buildBorrowerServer(summarizerConfig);
+  await summarizer.app.listen({ port: SUMMARIZER_PORT, host: "0.0.0.0" });
+  await registerWithCredit(summarizerConfig, summarizer.locus, summarizer.credit);
+  console.log(`  ✓ summarizer     → http://localhost:${SUMMARIZER_PORT}`);
+
+  // ── agent-code-reviewer (loss-leader pricing → reliable defaults) ──
+  const reviewerConfig = {
+    ...sharedAgentBase,
+    port: REVIEWER_PORT,
+    agentId: "code-reviewer",
+    agentName: "Code Reviewer",
+    agentDescription: "Reviews code for bugs, style, and security issues",
+    systemPrompt: systemPromptFor("code-reviewer"),
+    locusApiKey: REVIEWER_KEY,
+    locusWebhookSecret: REVIEWER_SECRET,
+    // Loss-leader: low revenue → forces borrowing → drained balance →
+    // default. Same dynamic the old borrower-b had.
     workPrice: 0.001,
-    workCost: 0.008,
-    safetyBuffer: 0.001,
-    creditAgentUrl: `http://localhost:${CREDIT_PORT}`,
   };
-  const borrowerB = await buildBorrowerServer(borrowerBConfig);
-  await borrowerB.app.listen({ port: BORROWER_B_PORT, host: "0.0.0.0" });
-  await registerWithCredit(borrowerBConfig, borrowerB.locus, borrowerB.credit);
-  console.log(`  ✓ borrower-b    → http://localhost:${BORROWER_B_PORT}`);
+  const reviewer = await buildBorrowerServer(reviewerConfig);
+  await reviewer.app.listen({ port: REVIEWER_PORT, host: "0.0.0.0" });
+  await registerWithCredit(reviewerConfig, reviewer.locus, reviewer.credit);
+  console.log(`  ✓ code-reviewer  → http://localhost:${REVIEWER_PORT}`);
 
-  // ── customer-agent ──────────────────────────────────────────────────
+  // ── agent-code-writer (shares wallet with summarizer) ──────────────
+  const writerConfig = {
+    ...sharedAgentBase,
+    port: WRITER_PORT,
+    agentId: "code-writer",
+    agentName: "Code Writer",
+    agentDescription: "Generates code from natural language specifications",
+    systemPrompt: systemPromptFor("code-writer"),
+    locusApiKey: SHARED_WALLET_KEY,
+    locusWebhookSecret: SHARED_WALLET_SECRET,
+  };
+  const writer = await buildBorrowerServer(writerConfig);
+  await writer.app.listen({ port: WRITER_PORT, host: "0.0.0.0" });
+  await registerWithCredit(writerConfig, writer.locus, writer.credit);
+  console.log(`  ✓ code-writer    → http://localhost:${WRITER_PORT} (shares wallet w/ summarizer)`);
+
+  // ── customer-agent (legacy demo trigger) ────────────────────────────
   const customerConfig = {
     port: CUSTOMER_PORT,
     locusApiKey: CUSTOMER_KEY,
     locusApiBase: cfg.locusApiBase,
     locusOfflineMode: true,
-    borrowerAUrl: `http://localhost:${BORROWER_A_PORT}`,
-    borrowerBUrl: `http://localhost:${BORROWER_B_PORT}`,
+    borrowerAUrl: `http://localhost:${SUMMARIZER_PORT}`,
+    borrowerBUrl: `http://localhost:${REVIEWER_PORT}`,
     continuousMode: false,
     jobIntervalSeconds: 20,
     borrowerWeightA: 0.7,
@@ -157,10 +217,15 @@ async function main(): Promise<void> {
 
   // ── canonical demo seed (single source of truth — see demo-seed.ts) ─
   const seedResult = await applyDemoSeed(cfg);
+
+  // V2 safety net: every agent on the marketplace must show "Available"
+  // for the demo. Force isActive=true regardless of subscription state.
+  await AgentModel.updateMany({}, { $set: { isActive: true } });
   console.log("\n  ✓ seeded:", seedResult.borrowersReset.join(", "));
-  console.log(`    customer wallet: $0.5000`);
-  console.log(`    borrower-a:      $0.0010 / score 750 / limit $0.05`);
-  console.log(`    borrower-b:      $0.0010 / score 550 / limit $0.02`);
+  console.log(`    customer wallet:  $0.5000`);
+  console.log(`    summarizer:       $0.0010 / score 750 / limit $0.05  (shared wallet)`);
+  console.log(`    code-reviewer:    $0.0010 / score 550 / limit $0.02`);
+  console.log(`    code-writer:      $0.0010 / score 700 / limit $0.04  (shared wallet)`);
   console.log("\nReady. Open http://localhost:3000/flow and click [Run Loan].\n");
   console.log("Ctrl+C to shut down all services.\n");
 
@@ -175,8 +240,11 @@ async function main(): Promise<void> {
       score.stop();
       defaults.stop();
       settlement.stop();
-      await borrowerA.app.close();
-      await borrowerB.app.close();
+      escrow.stop();
+      subscription.stop();
+      await summarizer.app.close();
+      await reviewer.app.close();
+      await writer.app.close();
       await customer.app.close();
       await credit.close();
       await disconnect();

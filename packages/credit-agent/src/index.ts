@@ -11,8 +11,10 @@ import { initLocusClient } from "./lib/locus.js";
 import { buildServer } from "./server.js";
 import { startCollectionLoop } from "./jobs/collection-loop.js";
 import { startDefaultLoop } from "./jobs/default-loop.js";
+import { startEscrowWatcher } from "./jobs/escrow-watcher.js";
 import { startScoreRecomputeLoop } from "./jobs/score-recompute-loop.js";
 import { startSettlementWatcher } from "./jobs/settlement-watcher.js";
+import { startSubscriptionWatcher } from "./jobs/subscription-watcher.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 loadDotenv({ path: resolve(__dirname, "../.env") });
@@ -33,6 +35,8 @@ async function main(): Promise<void> {
   const score = startScoreRecomputeLoop({ logger: app.log, config: cfg });
   const defaults = startDefaultLoop({ logger: app.log, config: cfg });
   const settlement = startSettlementWatcher({ logger: app.log, config: cfg });
+  const escrow = startEscrowWatcher({ logger: app.log, config: cfg });
+  const subscription = startSubscriptionWatcher({ logger: app.log, config: cfg });
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, "shutting down");
@@ -40,6 +44,8 @@ async function main(): Promise<void> {
     score.stop();
     defaults.stop();
     settlement.stop();
+    escrow.stop();
+    subscription.stop();
     await app.close();
     await disconnect();
     process.exit(0);

@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { credit } from "../../../lib/credit-client";
-import { fmtRelative, fmtTime, fmtPct } from "../../../lib/format";
-import { rateFor, tierFor } from "../../../lib/policy";
-import { useCreditEvents } from "../../../lib/sse";
+import { credit } from "../../../../lib/credit-client";
+import { fmtRelative, fmtTime, fmtPct } from "../../../../lib/format";
+import { rateFor, tierFor } from "../../../../lib/policy";
+import { useCreditEvents } from "../../../../lib/sse";
 import {
   Button,
   Card,
@@ -15,9 +15,9 @@ import {
   Tag,
   TxHash,
   USDC,
-} from "../../../components/ui";
-import { PageHeader } from "../../../components/PageHeader";
-import type { LoanRow } from "../../../lib/types";
+} from "../../../../components/ui";
+import { PageHeader } from "../../../../components/PageHeader";
+import type { LoanRow } from "../../../../lib/types";
 
 interface Props {
   params: { id: string };

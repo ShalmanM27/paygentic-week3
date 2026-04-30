@@ -92,6 +92,7 @@ export async function defaultLoan(args: {
     loanId: loan.loanId,
     borrowerId: loan.borrowerId,
     reason: args.reason,
+    linkedTaskId: loan.linkedTaskId ?? null,
   });
 
   args.log.info(

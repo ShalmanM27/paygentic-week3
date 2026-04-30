@@ -178,7 +178,13 @@ async function main(): Promise<void> {
   step("boot borrower-a");
   const borrowerAConfig = {
     port: BORROWER_A_PORT,
-    borrowerId: BORROWER_A_ID,
+    agentId: BORROWER_A_ID,
+    agentName: "TestAgentA",
+    agentDescription: "test",
+    geminiModel: "gemini-1.5-flash",
+    geminiApiKey: "",
+    geminiApiBase: "https://generativelanguage.googleapis.com/v1beta",
+    systemPrompt: "test prompt",
     locusApiKey: BORROWER_A_KEY,
     locusApiBase: cfg.locusApiBase,
     locusWebhookSecret: BORROWER_A_WEBHOOK_SECRET,
@@ -194,7 +200,13 @@ async function main(): Promise<void> {
   step("boot borrower-b");
   const borrowerBConfig = {
     port: BORROWER_B_PORT,
-    borrowerId: BORROWER_B_ID,
+    agentId: BORROWER_B_ID,
+    agentName: "TestAgentB",
+    agentDescription: "test",
+    geminiModel: "gemini-1.5-flash",
+    geminiApiKey: "",
+    geminiApiBase: "https://generativelanguage.googleapis.com/v1beta",
+    systemPrompt: "test prompt",
     locusApiKey: BORROWER_B_KEY,
     locusApiBase: cfg.locusApiBase,
     locusWebhookSecret: BORROWER_B_WEBHOOK_SECRET,

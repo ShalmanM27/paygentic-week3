@@ -14,6 +14,7 @@ export type SseEvent =
       txHash: string | null;
       targetSessionId: string;
       repaymentSessionId: string;
+      linkedTaskId: string | null;
     }
   | {
       kind: "loan.repaid";
@@ -21,6 +22,7 @@ export type SseEvent =
       loanId: string;
       borrowerId: string;
       txHash: string | null;
+      linkedTaskId: string | null;
     }
   | {
       kind: "loan.defaulted";
@@ -28,6 +30,7 @@ export type SseEvent =
       loanId: string;
       borrowerId: string;
       reason: string;
+      linkedTaskId: string | null;
     }
   | {
       kind: "score.changed";
@@ -60,7 +63,48 @@ export type SseEvent =
       kind: "system.heartbeat";
       ts: number;
       uptimeSec: number;
-    };
+    }
+  // ── Escrow-task lifecycle events ───────────────────────────────────
+  | { kind: "task.created"; ts: number; taskId: string; agentId: string; pricingUsdc: number }
+  | { kind: "task.escrow_paid"; ts: number; taskId: string; agentId: string; txHash: string | null }
+  | { kind: "task.dispatched"; ts: number; taskId: string; agentId: string }
+  | { kind: "task.processing"; ts: number; taskId: string; agentId: string }
+  | { kind: "task.borrowing"; ts: number; taskId: string; agentId: string }
+  | { kind: "task.borrowed"; ts: number; taskId: string; agentId: string; loanId: string }
+  | {
+      kind: "task.delivered";
+      ts: number;
+      taskId: string;
+      agentId: string;
+      modelUsed: string | null;
+      charsOutput: number;
+    }
+  | {
+      kind: "task.released";
+      ts: number;
+      taskId: string;
+      agentId: string;
+      releaseTxHash: string | null;
+    }
+  | { kind: "task.failed"; ts: number; taskId: string; reason: string }
+  | { kind: "task.refunded"; ts: number; taskId: string; refundExecuted: boolean }
+  | { kind: "task.expired"; ts: number; taskId: string }
+  // ── Agent registration / rent (Phase X4) ─────────────────────────────
+  | {
+      kind: "agent.registered";
+      ts: number;
+      agentId: string;
+      operatorId: string;
+      subscriptionId: string;
+    }
+  | {
+      kind: "agent.activated";
+      ts: number;
+      agentId: string;
+      subscriptionId: string;
+      coverageEndAt: string;
+    }
+  | { kind: "subscription.expired"; ts: number; subscriptionId: string };
 
 export type LoanStatus = "REQUESTED" | "FUNDED" | "REPAID" | "DEFAULTED";
 
@@ -156,4 +200,145 @@ export interface TriggerResult {
   sessionId: string;
   transactionId: string;
   status: string;
+}
+
+// ── Agent registry / tasks ─────────────────────────────────────────────
+
+export interface AgentRegistryEntry {
+  agentId: string;
+  displayName: string;
+  description: string;
+  pricingUsdc: number;
+  category: string;
+  emoji: string;
+  operatorId: string;
+  operatorName: string;
+  capabilities: string[];
+  serviceUrl: string;
+  walletAddress: string;
+  isBuiltIn: boolean;
+}
+
+export type SubscriptionStatus = "PENDING_PAYMENT" | "ACTIVE" | "EXPIRED";
+
+export interface AgentSubscriptionRow {
+  subscriptionId: string;
+  agentId: string;
+  operatorId: string;
+  rentUsdc: number;
+  coverageStartAt: string | null;
+  coverageEndAt: string | null;
+  escrowSessionId: string;
+  escrowSessionStatus: "PENDING" | "PAID" | "EXPIRED" | "CANCELLED";
+  escrowTxHash: string | null;
+  status: SubscriptionStatus;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AgentRow {
+  agentId: string;
+  displayName: string;
+  description: string;
+  category: string;
+  emoji: string;
+  pricingUsdc: number;
+  operatorId: string;
+  operatorName: string;
+  operatorEmail?: string | null;
+  serviceUrl: string;
+  capabilities: string[];
+  walletAddress: string;
+  isBuiltIn: boolean;
+  isActive: boolean;
+  activatedAt: string | null;
+  suspendedAt: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface RegisterAgentBody {
+  agentId: string;
+  displayName: string;
+  description: string;
+  category: "Text" | "Engineering" | "Creative" | "Research";
+  emoji: string;
+  pricingUsdc: number;
+  operatorName: string;
+  operatorEmail: string;
+  serviceUrl: string;
+  walletAddress: string;
+  capabilities: string[];
+}
+
+export interface RegisterAgentResponse {
+  agent: AgentRow;
+  subscription: AgentSubscriptionRow;
+  checkoutUrl: string | null;
+  sessionId: string;
+}
+
+export interface SubscriptionResponse {
+  subscription: AgentSubscriptionRow;
+  agent: AgentRow | null;
+}
+
+export type TaskStatus =
+  | "DRAFT"
+  | "PAID"
+  | "DISPATCHED"
+  | "PROCESSING"
+  | "DELIVERED"
+  | "RELEASED"
+  | "FAILED"
+  | "REFUNDED"
+  | "EXPIRED";
+
+export type EscrowSessionStatus = "PENDING" | "PAID" | "EXPIRED" | "CANCELLED";
+
+export interface TaskRow {
+  taskId: string;
+  userIdentifier: string;
+  agentId: string;
+  input: string;
+  pricingUsdc: number;
+  escrowSessionId: string;
+  escrowSessionStatus: EscrowSessionStatus;
+  escrowTxHash: string | null;
+  escrowReleaseTxHash: string | null;
+  escrowRefundTxHash: string | null;
+  payerWalletAddress: string | null;
+  status: TaskStatus;
+  output: string | null;
+  outputAt: string | null;
+  verifiedAt: string | null;
+  verificationNotes: string | null;
+  modelUsed: string | null;
+  borrowedToFulfill: boolean;
+  loanId: string | null;
+  dispatchAttempts: number;
+  lastDispatchError: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateTaskResponse {
+  task: TaskRow;
+  checkoutUrl: string | null;
+  sessionId: string;
+}
+
+export interface ListTasksResponse {
+  tasks: TaskRow[];
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
+}
+
+export interface GetTaskResponse {
+  task: TaskRow;
+  agent: AgentRegistryEntry | null;
 }

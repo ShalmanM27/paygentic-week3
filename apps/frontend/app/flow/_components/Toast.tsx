@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { X } from "lucide-react";
 
 export interface ToastMessage {
   id: number;
@@ -15,6 +16,13 @@ const VARIANT_CLS: Record<NonNullable<ToastMessage["variant"]>, string> = {
   accent: "bg-accent-soft border-accent/40 text-accent",
 };
 
+const VARIANT_ICON: Record<NonNullable<ToastMessage["variant"]>, string> = {
+  info: "ℹ",
+  warn: "⚠",
+  danger: "✕",
+  accent: "✓",
+};
+
 export function ToastStack({
   toasts,
   onDismiss,
@@ -23,9 +31,14 @@ export function ToastStack({
   onDismiss: (id: number) => void;
 }) {
   return (
-    <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-md">
+    <div
+      className="fixed left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 max-w-lg w-[calc(100%-2rem)] pointer-events-none"
+      style={{ top: 88 }}
+    >
       {toasts.map((t) => (
-        <ToastItem key={t.id} toast={t} onDismiss={onDismiss} />
+        <div key={t.id} className="pointer-events-auto">
+          <ToastItem toast={t} onDismiss={onDismiss} />
+        </div>
       ))}
     </div>
   );
@@ -43,12 +56,25 @@ function ToastItem({
     return () => clearTimeout(t);
   }, [toast.id, onDismiss]);
 
-  const cls = VARIANT_CLS[toast.variant ?? "info"];
+  const variant = toast.variant ?? "info";
+  const cls = VARIANT_CLS[variant];
   return (
     <div
-      className={`px-3 py-2 rounded border font-mono-tight text-sm shadow-lg ${cls}`}
+      className={`px-4 py-3 rounded-xl border backdrop-blur-md shadow-lg flex items-start gap-3 ${cls}`}
     >
-      {toast.text}
+      <span className="text-base leading-none mt-0.5" aria-hidden>
+        {VARIANT_ICON[variant]}
+      </span>
+      <div className="flex-1 text-sm leading-relaxed font-medium break-words">
+        {toast.text}
+      </div>
+      <button
+        onClick={() => onDismiss(toast.id)}
+        className="text-current opacity-60 hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5"
+        aria-label="Dismiss"
+      >
+        <X size={14} />
+      </button>
     </div>
   );
 }

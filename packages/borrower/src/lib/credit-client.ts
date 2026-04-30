@@ -15,6 +15,10 @@ export interface DrawParams {
   amount: number;
   purpose: string;
   ttl: number;
+  /** Optional escrow-task association — when set, the loan record's
+   *  linkedTaskId is populated and the decision token carries it through
+   *  to /credit/fund. */
+  taskId?: string;
 }
 
 export interface DrawApprovedResponse {

@@ -38,6 +38,8 @@ interface MockSession {
   sellerApiKey: string;
   /** Set on the PENDING→PAID transition. Surfaced by getSession. */
   paymentTxHash?: string;
+  /** Payer wallet address — set on PENDING→PAID by agentPay(). */
+  payerAddress?: string;
 }
 
 interface MockTransaction {
@@ -59,6 +61,20 @@ let txSeq = 0;
 /** Test/runtime hook: override the mock balance for a specific apiKey. */
 export function setMockBalanceForKey(apiKey: string, balance: string): void {
   balanceByKey.set(apiKey, balance);
+}
+
+/**
+ * Test-only hook: flip a mock session to EXPIRED. Real Locus expires
+ * sessions on its side after `expiresAt`; the mock has no clock loop, so
+ * tests that need to drive the EXPIRED branch use this helper directly.
+ */
+export function markMockSessionExpired(sessionId: string): boolean {
+  const s = sessionRegistry.get(sessionId);
+  if (!s) return false;
+  if (s.status === "PAID") return false; // can't unpay
+  s.status = "EXPIRED";
+  sessionRegistry.set(sessionId, s);
+  return true;
 }
 
 /**
@@ -206,7 +222,11 @@ export class MockLocusClient {
     if (!s) {
       throw new Error(`mock: session ${sessionId} not found`);
     }
-    return {
+    // We surface payerAddress as an extra field (returned by Locus beta on
+    // PAID sessions under varying names; escrow-watcher reads defensively).
+    // Cast through unknown to keep the typed CheckoutSession surface clean
+    // while still letting consumers see the field.
+    const out: CheckoutSession & { payerAddress?: string } = {
       id: s.id,
       status: s.status,
       amount: s.amount,
@@ -216,6 +236,8 @@ export class MockLocusClient {
       metadata: s.metadata,
       paymentTxHash: s.paymentTxHash,
     };
+    if (s.payerAddress) out.payerAddress = s.payerAddress;
+    return out;
   }
 
   /**
@@ -282,6 +304,7 @@ export class MockLocusClient {
     const txHash = nextTxHash();
     s.status = "PAID";
     s.paymentTxHash = txHash;
+    s.payerAddress = this.walletAddress;
     sessionRegistry.set(sessionId, s);
 
     // Realistic balance flow: deduct from buyer, credit to seller — but

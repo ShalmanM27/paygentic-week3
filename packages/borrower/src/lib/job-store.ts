@@ -3,7 +3,8 @@
 
 export interface JobContext {
   sessionId: string;
-  url: string;
+  /** Customer-provided LLM input (was `url` pre-X1). */
+  input: string;
   callbackUrl: string;
   amount: number;
   createdAt: Date;

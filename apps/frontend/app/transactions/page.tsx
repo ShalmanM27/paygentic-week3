@@ -26,8 +26,9 @@ const TYPES = [
 
 const BORROWERS = [
   { key: "", label: "All" },
-  { key: "agent-a", label: "Agent A" },
-  { key: "agent-b", label: "Agent B" },
+  { key: "summarizer", label: "Summarizer" },
+  { key: "code-reviewer", label: "Code Reviewer" },
+  { key: "code-writer", label: "Code Writer" },
 ] as const;
 
 type Row = {

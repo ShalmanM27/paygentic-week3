@@ -47,9 +47,9 @@ export async function processJob(
       "processJob: borrowing",
     );
     const draw = await deps.credit.draw({
-      borrowerId: deps.config.borrowerId,
+      borrowerId: deps.config.agentId,
       amount: decision.amount,
-      purpose: "wrapped-api/scrape",
+      purpose: `wrapped-api/${deps.config.agentId}`,
       ttl: 3600,
     });
     if (!draw.approved) {
@@ -62,16 +62,19 @@ export async function processJob(
       receiptConfig: {
         enabled: true,
         fields: {
-          creditorName: deps.config.borrowerId,
+          creditorName: deps.config.agentName,
           lineItems: [
-            { description: `Cost cover for ${job.url}`, amount: String(decision.amount) },
+            {
+              description: `Cost cover for ${deps.config.agentId} task`,
+              amount: String(decision.amount),
+            },
           ],
         },
       },
       metadata: {
         kind: "borrower-cost",
         forSessionId: sessionId,
-        borrowerId: deps.config.borrowerId,
+        agentId: deps.config.agentId,
       },
       ttlSeconds: 600,
     });
@@ -90,7 +93,16 @@ export async function processJob(
     );
   }
 
-  const result = await doWork({ url: job.url });
+  const result = await doWork({
+    agentId: deps.config.agentId,
+    agentName: deps.config.agentName,
+    systemPrompt: deps.config.systemPrompt,
+    userInput: job.input,
+    geminiModel: deps.config.geminiModel,
+    geminiApiKey: deps.config.geminiApiKey,
+    geminiApiBase: deps.config.geminiApiBase,
+    locusOfflineMode: deps.config.locusOfflineMode,
+  });
 
   // In offline mode, simulate the on-chain portion of the work-cost as a
   // real balance drain. Production: the wrapped API call would deduct USDC.

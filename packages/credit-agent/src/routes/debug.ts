@@ -6,11 +6,13 @@
 
 import type { FastifyInstance } from "fastify";
 import {
+  AgentSubscriptionModel,
   BorrowerModel,
   LoanModel,
   RepaymentQueueModel,
   ScoreEventModel,
   ScoreReportModel,
+  TaskModel,
   TransactionModel,
 } from "@credit/shared";
 import type { CreditAgentConfig } from "../lib/config.js";
@@ -71,13 +73,16 @@ export async function debugRoute(
     if (!config.debugEndpointsEnabled) {
       return reply.code(404).send({ error: "not_found" });
     }
-    const [loans, queue, scoreEvents, scoreReports, txns] = await Promise.all([
-      LoanModel.deleteMany({}),
-      RepaymentQueueModel.deleteMany({}),
-      ScoreEventModel.deleteMany({}),
-      ScoreReportModel.deleteMany({}),
-      TransactionModel.deleteMany({}),
-    ]);
+    const [loans, queue, scoreEvents, scoreReports, txns, tasks, subs] =
+      await Promise.all([
+        LoanModel.deleteMany({}),
+        RepaymentQueueModel.deleteMany({}),
+        ScoreEventModel.deleteMany({}),
+        ScoreReportModel.deleteMany({}),
+        TransactionModel.deleteMany({}),
+        TaskModel.deleteMany({}),
+        AgentSubscriptionModel.deleteMany({}),
+      ]);
     _resetWebhookCapture();
     _resetDefaultedCache();
     const { borrowersReset } = await applyDemoSeed(config);
@@ -89,6 +94,8 @@ export async function debugRoute(
         score_events: scoreEvents.deletedCount ?? 0,
         score_reports: scoreReports.deletedCount ?? 0,
         transactions: txns.deletedCount ?? 0,
+        tasks: tasks.deletedCount ?? 0,
+        agent_subscriptions: subs.deletedCount ?? 0,
       },
       borrowersReset,
     };

@@ -219,6 +219,7 @@ export async function handleRepaymentPaid(
     loanId: loan.loanId,
     borrowerId: loan.borrowerId,
     txHash,
+    linkedTaskId: loan.linkedTaskId ?? null,
   });
   publish({
     kind: "session.paid",

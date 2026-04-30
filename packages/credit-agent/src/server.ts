@@ -4,6 +4,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import type { CreditAgentConfig } from "./lib/config.js";
+import { seedBuiltInAgents } from "./lib/agent-registry.js";
 import { agentsRoute } from "./routes/agents.js";
 import { debugRoute } from "./routes/debug.js";
 import { drawRoute } from "./routes/draw.js";
@@ -15,6 +16,7 @@ import { scoreRoute } from "./routes/score.js";
 import { scoreEventsRoute } from "./routes/score-events.js";
 import { scoreReportRoute } from "./routes/score-report.js";
 import { statsRoute } from "./routes/stats.js";
+import { tasksRoute } from "./routes/tasks.js";
 import { transactionsRoute } from "./routes/transactions.js";
 import { webhooksRoute } from "./routes/webhooks.js";
 import { wellKnownRoute } from "./routes/well-known.js";
@@ -82,7 +84,25 @@ export async function buildServer(
     });
   });
 
-  app.get("/healthz", async () => ({ ok: true }));
+  app.get("/healthz", async () => ({
+    ok: true,
+    offline: config.locusOfflineMode,
+    locusMode: config.locusOfflineMode ? "offline/mock" : "live/beta",
+  }));
+
+  // Seed built-in marketplace agents on boot. Idempotent — won't insert
+  // a row if one already exists for the same agentId.
+  try {
+    const seedResult = await seedBuiltInAgents();
+    if (seedResult.seeded.length > 0) {
+      app.log.info(
+        { seeded: seedResult.seeded },
+        "agent-registry: seeded built-in agents",
+      );
+    }
+  } catch (err) {
+    app.log.error({ err }, "agent-registry: seed failed (non-fatal)");
+  }
 
   await wellKnownRoute(app, config);
   await registerRoute(app);
@@ -96,6 +116,7 @@ export async function buildServer(
   await agentsRoute(app, config);
   await statsRoute(app);
   await loansRoute(app);
+  await tasksRoute(app, config);
   await eventsRoute(app, config);
   await debugRoute(app, config);
 

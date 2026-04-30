@@ -25,6 +25,8 @@ const loanSchema = new Schema(
     disbursementTxHash: { type: String, default: null },
     repaymentSessionId: { type: String, default: null },
     repaymentTxHash: { type: String, default: null },
+    /** When this loan was funded to cover an escrow task, the task's id. */
+    linkedTaskId: { type: String, default: null },
     status: {
       type: String,
       enum: LOAN_STATUSES,
@@ -40,6 +42,7 @@ const loanSchema = new Schema(
 );
 
 loanSchema.index({ borrowerId: 1, status: 1 });
+loanSchema.index({ linkedTaskId: 1 }, { sparse: true });
 
 export type Loan = InferSchemaType<typeof loanSchema>;
 export const LoanModel: Model<Loan> = model<Loan>("Loan", loanSchema);

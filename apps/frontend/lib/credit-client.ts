@@ -2,13 +2,21 @@
 // — relies on @fastify/cors on the agents.
 
 import type {
+  AgentRegistryEntry,
   BorrowerRow,
+  CreateTaskResponse,
   DrawApprovedResponse,
   FundResponse,
+  GetTaskResponse,
+  ListTasksResponse,
   LoanRow,
+  RegisterAgentBody,
+  RegisterAgentResponse,
   ScoreReportCreated,
   ScoreReportResult,
   ScoreSummary,
+  SubscriptionResponse,
+  TaskStatus,
   TriggerResult,
 } from "./types";
 
@@ -240,6 +248,87 @@ export const credit = {
       method: "POST",
       body: JSON.stringify(input),
     });
+  },
+
+  // ── Agent registry / escrow tasks (Phase X3) ─────────────────────────
+
+  getAgentRegistry(): Promise<{ agents: AgentRegistryEntry[] }> {
+    return jsonRequest(`${CREDIT_BASE}/agents/registry`);
+  },
+
+  createTask(input: {
+    agentId: string;
+    input: string;
+    userIdentifier?: string;
+  }): Promise<CreateTaskResponse> {
+    return jsonRequest(`${CREDIT_BASE}/tasks`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  getTask(taskId: string): Promise<GetTaskResponse> {
+    return jsonRequest(
+      `${CREDIT_BASE}/tasks/${encodeURIComponent(taskId)}`,
+    );
+  },
+
+  listTasks(params?: {
+    status?: TaskStatus;
+    agentId?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListTasksResponse> {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set("status", params.status);
+    if (params?.agentId) qs.set("agentId", params.agentId);
+    if (params?.limit !== undefined) qs.set("limit", String(params.limit));
+    if (params?.offset !== undefined) qs.set("offset", String(params.offset));
+    const query = qs.toString();
+    return jsonRequest(`${CREDIT_BASE}/tasks${query ? `?${query}` : ""}`);
+  },
+
+  getHealth(): Promise<{ ok: boolean; offline: boolean; locusMode: string }> {
+    return jsonRequest(`${CREDIT_BASE}/healthz`);
+  },
+
+  registerAgent(body: RegisterAgentBody): Promise<RegisterAgentResponse> {
+    return jsonRequest(`${CREDIT_BASE}/agents/register`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  getAgentSubscription(agentId: string): Promise<SubscriptionResponse> {
+    return jsonRequest(
+      `${CREDIT_BASE}/agents/${encodeURIComponent(agentId)}/subscription`,
+    );
+  },
+
+  getSubscription(subscriptionId: string): Promise<SubscriptionResponse> {
+    return jsonRequest(
+      `${CREDIT_BASE}/subscriptions/${encodeURIComponent(subscriptionId)}`,
+    );
+  },
+
+  // Alias for the legacy /agents/:id detail endpoint, surfaced under a name
+  // that matches the new /admin/agents/[id] page. Same shape as getAgent().
+  getAdminAgent(borrowerId: string): Promise<{
+    borrower: BorrowerRow & {
+      serviceUrl?: string;
+      apiKeyPrefix?: string | null;
+    };
+    recentLoans: LoanRow[];
+    totals: {
+      lifetimeBorrowed: number;
+      lifetimeRepaid: number;
+      lifetimeDefaulted: number;
+      openLoanCount: number;
+    };
+  }> {
+    return jsonRequest(
+      `${CREDIT_BASE}/agents/${encodeURIComponent(borrowerId)}`,
+    );
   },
 };
 

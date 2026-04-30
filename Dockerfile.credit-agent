@@ -1,0 +1,61 @@
+# Multi-stage Dockerfile for the CREDIT credit-agent service.
+# Targets linux/arm64 (Locus AWS Graviton). Local builds work on amd64
+# too because the base image is multi-arch.
+#
+# pnpm workspace context — needs the full repo to resolve
+# `@credit/shared` (workspace:*) at install time.
+#
+# Locus injects PORT=8080 and routes traffic to it. The credit-agent's
+# config.ts already reads `process.env.PORT ?? "4000"`, so binding to
+# 8080 in production happens automatically.
+
+# ── Stage 1: install all workspace deps ──────────────────────────────
+FROM node:20-alpine AS deps
+
+# pnpm via corepack (pinned to the project's declared version).
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+
+WORKDIR /app
+
+# Copy workspace manifest + every package.json so pnpm can resolve the
+# graph without copying source yet (better Docker layer caching).
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages/shared/package.json packages/shared/
+COPY packages/credit-agent/package.json packages/credit-agent/
+COPY packages/borrower/package.json packages/borrower/
+COPY packages/customer-agent/package.json packages/customer-agent/
+COPY packages/agent-summarizer/package.json packages/agent-summarizer/
+COPY packages/agent-code-reviewer/package.json packages/agent-code-reviewer/
+COPY packages/agent-code-writer/package.json packages/agent-code-writer/
+COPY apps/frontend/package.json apps/frontend/
+
+RUN pnpm install --frozen-lockfile --prefer-offline
+
+# ── Stage 2: copy source + slim runtime ──────────────────────────────
+FROM node:20-alpine AS runtime
+
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+
+# wget for Locus default health checks if needed.
+RUN apk add --no-cache wget
+
+WORKDIR /app
+
+# Bring in the resolved node_modules from the deps stage.
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY --from=deps /app/packages/credit-agent/node_modules ./packages/credit-agent/node_modules
+
+# Workspace metadata.
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+
+# Source for credit-agent + its only workspace dep.
+COPY packages/shared/ packages/shared/
+COPY packages/credit-agent/ packages/credit-agent/
+
+# Locus injects PORT=8080. We expose it for clarity.
+ENV NODE_ENV=production
+EXPOSE 8080
+
+# Run via the workspace start script (uses tsx — no build step needed).
+CMD ["pnpm", "--filter", "@credit/credit-agent", "start"]

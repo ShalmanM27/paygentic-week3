@@ -27,6 +27,9 @@ export interface CreditAgentConfig {
   settlementWatcherIntervalSeconds: number;
   settlementGraceSeconds: number;
   debugEndpointsEnabled: boolean;
+  agentRentUsdc: number;
+  agentRentCoverageDays: number;
+  subscriptionWatcherIntervalSeconds: number;
 }
 
 function req(name: string): string {
@@ -90,5 +93,10 @@ export function loadConfig(): CreditAgentConfig {
       process.env.SETTLEMENT_GRACE_SECONDS ?? "60",
     ),
     debugEndpointsEnabled: process.env.DEBUG_ENDPOINTS_ENABLED === "1",
+    agentRentUsdc: Number(process.env.AGENT_RENT_USDC ?? "0.005"),
+    agentRentCoverageDays: Number(process.env.AGENT_RENT_COVERAGE_DAYS ?? "30"),
+    subscriptionWatcherIntervalSeconds: Number(
+      process.env.SUBSCRIPTION_WATCHER_INTERVAL_SECONDS ?? "3",
+    ),
   };
 }

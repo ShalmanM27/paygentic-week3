@@ -7,6 +7,7 @@
     background: #0a0a0a;
     color: #e5e5e5;
     font-family: var(--font-inter), system-ui, sans-serif;
+    transition: background 0.3s, color 0.3s;
   }
   body {
     min-height: 100vh;
@@ -29,6 +30,51 @@
   }
   ::-webkit-scrollbar-thumb:hover {
     background: #404040;
+  }
+
+  /* ── Light theme — opt-in via <html class="light"> ──────────────────
+   * Most of the UI uses fixed dark tokens (panel, ink, etc.). Light
+   * mode rewires those tokens at the root via CSS variables and a
+   * small set of overrides below. Functional, not a full redesign.
+   */
+  html.light, html.light body {
+    background: #fafafa;
+    color: #0a0a0a;
+  }
+  html.light .bg-panel,
+  html.light [class*="bg-panel-card"]:not([class*="bg-panel-cardHover"]) {
+    background: #ffffff !important;
+  }
+  html.light [class*="bg-panel-cardHover"] {
+    background: #f4f4f5 !important;
+  }
+  html.light [class*="border-panel-border"] {
+    border-color: #e5e5e5 !important;
+  }
+  html.light [class*="border-panel-borderStrong"] {
+    border-color: #d4d4d8 !important;
+  }
+  html.light [class*="text-ink"]:not([class*="text-ink-dim"]):not([class*="text-ink-dimmer"]) {
+    color: #0a0a0a !important;
+  }
+  html.light [class*="text-ink-dim"]:not([class*="text-ink-dimmer"]) {
+    color: #525252 !important;
+  }
+  html.light [class*="text-ink-dimmer"] {
+    color: #737373 !important;
+  }
+  html.light ::-webkit-scrollbar-track {
+    background: #fafafa;
+  }
+  html.light ::-webkit-scrollbar-thumb {
+    background: #d4d4d8;
+  }
+  html.light ::-webkit-scrollbar-thumb:hover {
+    background: #a3a3a3;
+  }
+  html.light ::selection {
+    background: rgba(0, 184, 138, 0.3);
+    color: #000;
   }
 }
 
