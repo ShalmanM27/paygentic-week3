@@ -259,6 +259,64 @@ export function MoneyFlowGraph({
             setTimeout(() => setShakeNode(null), 400);
           }, at);
         }
+        // Graph-only secondary orb (e.g. the loan disbursement during
+        // the "Borrower does the work" beat). Fires after the
+        // configured delay; the checklist ignores it.
+        if (beat.extraOrb) {
+          const xb = beat.extraOrb;
+          const delay = beat.extraOrbDelayMs ?? 0;
+          setTimeout(() => {
+            orbSeqRef.current += 1;
+            const id = `xorb-${runId}-${idx}-${orbSeqRef.current}`;
+            setOrbs((prev) => [
+              ...prev,
+              {
+                id,
+                beatIdx: idx,
+                from: xb.from,
+                to: xb.to,
+                purpose: xb.purpose,
+                label: xb.label,
+                amount: xb.amount,
+                fragments: !!xb.fragments,
+                spawnedAt: Date.now(),
+              },
+            ]);
+            // Burst + tx chip + block tile when it lands.
+            const dest = xb.to;
+            const color = PURPOSE_STYLE[xb.purpose].glow;
+            setTimeout(() => {
+              burstSeqRef.current += 1;
+              const burstId = `xb-${runId}-${idx}-${burstSeqRef.current}`;
+              setBursts((prev) => [...prev, { id: burstId, node: dest, color }]);
+              setTimeout(() => {
+                setBursts((prev) => prev.filter((b) => b.id !== burstId));
+              }, 800);
+              const hash = mockHashFor(`x-${runId}-${idx}-${xb.label}`);
+              setTxChips((prev) => ({
+                ...prev,
+                [dest]: { node: dest, hash, until: Date.now() + 8000 },
+              }));
+              tileSeqRef.current += 1;
+              blockHeightRef.current += 1;
+              const tileId = `xt-${runId}-${idx}-${tileSeqRef.current}`;
+              setBlockTiles((prev) => {
+                const next = [
+                  ...prev,
+                  {
+                    id: tileId,
+                    hash,
+                    bornAt: Date.now(),
+                    color,
+                    height: blockHeightRef.current,
+                    label: `$${xb.amount.toFixed(4)}`,
+                  },
+                ];
+                return next.slice(-9);
+              });
+            }, ORB_DURATION_MS);
+          }, delay);
+        }
       }
       // CONFIRMED / FAILED → land effect: vault, balances, block tile.
       if (

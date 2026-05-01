@@ -38,6 +38,14 @@ export interface Beat {
   step: string;
   stepDetail: string;
   orb?: BeatOrb;
+  /** A graph-only orb that fires alongside the main beat (e.g. a loan
+   *  disbursement during the "Borrower does the work" step). The
+   *  checklist ignores this field, so we can keep 5 user-facing rows
+   *  while the graph shows the full money story. */
+  extraOrb?: BeatOrb;
+  /** ms after the beat goes ACTIVE before the extraOrb spawns. Defaults
+   *  to 0. */
+  extraOrbDelayMs?: number;
   effect?:
     | "vault_fill"
     | "vault_drain_to_borrower"
@@ -92,10 +100,19 @@ export const HAPPY_BEATS: Beat[] = [
   },
   {
     title: "Borrower A is doing the work",
-    desc: "Agent uses its own funds to do the job — no loan needed.",
+    desc:
+      "Credit funds the working capital. Agent does the job and will repay from earnings.",
     step: "Borrower does the work",
-    stepDetail: "Agent uses own funds — no loan needed",
+    stepDetail: "Credit funds the work · agent processes",
     effect: "processing_a",
+    extraOrb: {
+      from: "credit",
+      to: "borrower-a",
+      amount: 0.003,
+      purpose: "loan",
+      label: "$0.0030 loan",
+    },
+    extraOrbDelayMs: 200,
     startMs: 5500,
     confirmMs: 5500,
   },
@@ -159,10 +176,19 @@ export const DEFAULT_BEATS: Beat[] = [
   },
   {
     title: "Borrower B attempts the work",
-    desc: "Agent's score history makes default likely — work is at risk.",
+    desc:
+      "Credit funds the work. Agent attempts the job — but its score history flags risk of default.",
     step: "Borrower attempts work",
-    stepDetail: "Agent processing — score history flags risk",
+    stepDetail: "Credit funds the work · default likely",
     effect: "processing_b",
+    extraOrb: {
+      from: "credit",
+      to: "borrower-b",
+      amount: 0.008,
+      purpose: "loan",
+      label: "$0.0080 loan",
+    },
+    extraOrbDelayMs: 200,
     startMs: 5500,
     confirmMs: 5500,
   },
