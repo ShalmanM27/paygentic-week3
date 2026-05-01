@@ -303,25 +303,51 @@ export default function TaskDetail({ params }: Props) {
       {task.status === "DRAFT" && (
         <Section title={`Pay $${task.pricingUsdc.toFixed(4)} USDC to escrow`}>
           <Card className="p-4 space-y-4">
-            <LocusCheckoutMount
-              sessionId={task.escrowSessionId}
-              mode="embedded"
-              onPaid={() => fetchTask()}
-              onError={(e) => setErr(e.message)}
-              onCancel={() => {
-                /* no-op — user can retry */
-              }}
-            />
+            {/* Offline-mode sessions (sess_mock_*) aren't recognized by
+             *  the real Locus checkout iframe — the SDK request returns
+             *  500. Detect the prefix and skip the embed; the
+             *  "Simulate payment" button becomes the primary CTA. */}
+            {task.escrowSessionId.startsWith("sess_mock_") ? (
+              <div className="rounded-md border border-info/30 bg-info-soft px-4 py-3 text-sm text-ink-dim leading-relaxed">
+                <div className="text-info font-medium mb-1">
+                  Offline / mock mode
+                </div>
+                Locus is running in offline mode (no real USDC moves).
+                Click <strong className="text-info">Simulate payment</strong>{" "}
+                below to mark this escrow as paid and watch the
+                lifecycle progress.
+              </div>
+            ) : (
+              <LocusCheckoutMount
+                sessionId={task.escrowSessionId}
+                mode="embedded"
+                onPaid={() => fetchTask()}
+                onError={(e) => setErr(e.message)}
+                onCancel={() => {
+                  /* no-op — user can retry */
+                }}
+              />
+            )}
             <div className="flex items-center justify-between text-xs font-mono-tight pt-3 border-t border-panel-border">
               <SessionId id={task.escrowSessionId} />
               <Button
-                variant="secondary"
-                size="sm"
+                variant={
+                  task.escrowSessionId.startsWith("sess_mock_")
+                    ? "primary"
+                    : "secondary"
+                }
+                size={
+                  task.escrowSessionId.startsWith("sess_mock_") ? "lg" : "sm"
+                }
                 disabled={simulating}
                 onClick={simulatePay}
                 title="Offline-mode demo helper"
               >
-                {simulating ? "Simulating…" : "↳ Simulate payment (offline)"}
+                {simulating
+                  ? "Simulating…"
+                  : task.escrowSessionId.startsWith("sess_mock_")
+                    ? `Simulate payment · $${task.pricingUsdc.toFixed(4)}`
+                    : "↳ Simulate payment (offline)"}
               </Button>
             </div>
           </Card>

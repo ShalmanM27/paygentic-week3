@@ -124,6 +124,19 @@ export default function AgentDetailPage({ params }: Props) {
       setHealthy(false);
       return;
     }
+    // Only ping the localhost health endpoint when the page itself is
+    // served from localhost. On a deployed HTTPS host, mixed-content
+    // blocks the http://localhost:* request and CORS would reject it
+    // anyway — surface "healthy" optimistically since the platform
+    // doesn't expose per-agent service URLs to the browser.
+    const isLocal =
+      typeof window !== "undefined" &&
+      (window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1");
+    if (!isLocal) {
+      setHealthy(true);
+      return;
+    }
     const ping = async (): Promise<void> => {
       try {
         const res = await fetch(`http://localhost:${port}/healthz`, {
