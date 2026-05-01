@@ -33,6 +33,11 @@ const taskSchema = new Schema(
     pricingUsdc: { type: Number, required: true, min: 0 },
 
     escrowSessionId: { type: String, required: true, unique: true, index: true },
+    /** Persisted at session-create time so the frontend can mount the
+     *  Locus Checkout iframe against the correct beta/prod origin.
+     *  Locus's GET /sessions/:id omits this field, so we have to keep
+     *  the value we got back at create. */
+    escrowCheckoutUrl: { type: String, default: null },
     escrowSessionStatus: {
       type: String,
       enum: ESCROW_SESSION_STATUSES,

@@ -320,6 +320,7 @@ export default function TaskDetail({ params }: Props) {
             ) : (
               <LocusCheckoutMount
                 sessionId={task.escrowSessionId}
+                checkoutUrl={task.escrowCheckoutUrl ?? undefined}
                 mode="embedded"
                 onPaid={() => fetchTask()}
                 onError={(e) => setErr(e.message)}

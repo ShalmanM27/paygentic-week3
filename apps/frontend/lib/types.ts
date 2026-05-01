@@ -303,6 +303,11 @@ export interface TaskRow {
   input: string;
   pricingUsdc: number;
   escrowSessionId: string;
+  /** Persisted at session-create time so the SDK iframe can mount
+   *  against the right origin. Beta sessions live on
+   *  `https://checkout.beta.paywithlocus.com`; the SDK defaults to
+   *  the production origin and 404s on beta IDs without this. */
+  escrowCheckoutUrl?: string | null;
   escrowSessionStatus: EscrowSessionStatus;
   escrowTxHash: string | null;
   escrowReleaseTxHash: string | null;

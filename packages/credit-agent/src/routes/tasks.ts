@@ -111,6 +111,7 @@ export async function tasksRoute(
         input,
         pricingUsdc: meta.pricingUsdc,
         escrowSessionId: session.id,
+        escrowCheckoutUrl: session.checkoutUrl ?? null,
         escrowSessionStatus: "PENDING",
         status: "DRAFT",
       });
