@@ -100,15 +100,7 @@ export default function TransactionsPage() {
 
   return (
     <main className="min-h-screen p-6 max-w-7xl mx-auto">
-      <PageHeader
-        rightSlot={
-          <>
-            <Link href="/flow" className="text-info text-sm hover:underline">
-              Flow demo
-            </Link>
-          </>
-        }
-      />
+      <PageHeader />
       <div className="mb-6">
         <h1 className="font-mono-tight text-xl font-semibold tracking-tight">
           Transactions

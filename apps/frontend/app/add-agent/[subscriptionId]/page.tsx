@@ -138,13 +138,7 @@ export default function ActivateAgentPage({ params }: Props) {
 
   return (
     <main className="min-h-screen p-6 max-w-3xl mx-auto">
-      <PageHeader
-        rightSlot={
-          <Link href="/" className="text-info text-sm hover:underline">
-            ← Marketplace
-          </Link>
-        }
-      />
+      <PageHeader />
 
       <header className="space-y-1 pb-4 border-b border-panel-border mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">

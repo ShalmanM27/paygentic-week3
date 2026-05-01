@@ -1,463 +1,687 @@
 "use client";
 
-// V2 — landing page. Full-viewport hero, 3 innovations, live stats,
-// how-it-works. The agent grid lives at /marketplace.
+// Landing page — editorial rebuild on the design-system foundation.
+//
+// Sections (top → bottom):
+//   1. HERO              — pre-headline pill, italic-noun headline,
+//                          subtitle, two CTAs, capability strip.
+//   2. PRODUCT PREVIEW   — wide glass card showing a mock task
+//                          lifecycle (input · timeline · output).
+//   3. STATS STRIP       — 4 large numerals, count-up on scroll-in.
+//   4. HOW IT WORKS      — 3 numbered cards with cursor-glow.
+//   5. SIX FLOWS MARQUEE — horizontal looping pills.
+//   6. CLOSING CTA       — centered with italic-noun heading.
+//   7. FOOTER            — 4-column site footer.
+//
+// KEY MOVE: every heading uses the italic-noun pattern: one phrase
+// is wrapped in <em> which renders italic + accent gradient via the
+// global .text-display / .text-editorial classes.
 
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
 import {
-  ArrowRight,
-  Cog,
-  Lock,
-  ShieldCheck,
-  Sparkles,
-  Layers,
-  Activity,
-} from "lucide-react";
-import { credit } from "../lib/credit-client";
-import { Card } from "../components/ui";
+  animate,
+  motion,
+  useInView,
+  useMotionValue,
+  useScroll,
+  useTransform,
+} from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { ArrowRight, ChevronDown } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
-
-interface LiveStats {
-  tasksCompleted: number;
-  usdcSettled: number;
-  activeAgents: number;
-  avgCompletionSec: number;
-}
+import { Ornament } from "../components/Ornament";
 
 export default function LandingPage() {
-  const [stats, setStats] = useState<LiveStats | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const [s, reg, tasks] = await Promise.all([
-          credit.getStats().catch(() => null),
-          credit.getAgentRegistry().catch(() => ({ agents: [] })),
-          credit.listTasks({ limit: 100 }).catch(() => ({
-            tasks: [],
-            pagination: { total: 0, limit: 0, offset: 0, hasMore: false },
-          })),
-        ]);
-        if (cancelled) return;
-        const released = tasks.tasks.filter((t) => t.status === "RELEASED");
-        const usdcSettled = released.reduce((sum, t) => sum + t.pricingUsdc, 0);
-        const completionTimes = released
-          .map((t) => {
-            if (!t.createdAt || !t.outputAt) return null;
-            return (
-              (Date.parse(t.outputAt) - Date.parse(t.createdAt)) / 1000
-            );
-          })
-          .filter((n): n is number => n !== null && n > 0);
-        const avg =
-          completionTimes.length > 0
-            ? completionTimes.reduce((a, b) => a + b, 0) / completionTimes.length
-            : 0;
-        setStats({
-          tasksCompleted: Math.max(released.length, s?.loansFundedTotal ?? 0),
-          usdcSettled: Math.max(usdcSettled, s?.volumeUsdcSettled ?? 0),
-          activeAgents: reg.agents.length,
-          avgCompletionSec: avg,
-        });
-      } catch {
-        /* ignore */
-      }
-    }
-    load();
-    const t = setInterval(load, 5_000);
-    return () => {
-      cancelled = true;
-      clearInterval(t);
-    };
-  }, []);
-
   return (
-    <main className="min-h-screen relative">
-      {/* Animated gradient backdrop */}
+    <>
+      <PageHeader />
+      <motion.main
+        className="min-h-screen relative"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+      >
+        <Hero />
+        <ProductPreview />
+        <StatsStrip />
+        <HowItWorks />
+        <SixFlowsMarquee />
+        <ClosingCta />
+        <SiteFooter />
+      </motion.main>
+    </>
+  );
+}
+
+// ── HERO ─────────────────────────────────────────────────────────────
+function Hero() {
+  return (
+    <section className="relative min-h-[88vh] flex items-center justify-center overflow-hidden">
+      <Ornament variant="sun" className="top-16 right-16" />
+      <Ornament variant="star" className="bottom-32 left-20" />
+
+      {/* Per-page accent blob behind the headline */}
       <div className="absolute inset-0 -z-10 pointer-events-none overflow-hidden">
         <motion.div
-          className="absolute -top-40 -left-40 w-[700px] h-[700px] rounded-full opacity-25 blur-3xl"
-          style={{ background: "radial-gradient(circle, #8b5cf6, transparent)" }}
+          className="absolute top-[10%] left-1/3 w-[55vw] h-[55vw] rounded-full opacity-25 blur-3xl"
+          style={{
+            background: "radial-gradient(circle, #8b5cf6, transparent 65%)",
+          }}
           animate={{ x: [0, 80, 0], y: [0, 40, 0] }}
           transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
         />
-        <motion.div
-          className="absolute -top-20 right-10 w-[600px] h-[600px] rounded-full opacity-20 blur-3xl"
-          style={{ background: "radial-gradient(circle, #06b6d4, transparent)" }}
-          animate={{ x: [0, -60, 0], y: [0, 60, 0] }}
-          transition={{ duration: 28, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.div
-          className="absolute top-[60vh] left-1/3 w-[500px] h-[500px] rounded-full opacity-20 blur-3xl"
-          style={{ background: "radial-gradient(circle, #34d399, transparent)" }}
-          animate={{ x: [0, 50, 0], y: [0, -30, 0] }}
-          transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
-        />
       </div>
 
-      <div className="p-6 max-w-6xl mx-auto">
-        <PageHeader />
-
-        {/* HERO — full viewport */}
-        <section className="min-h-[80vh] flex items-center">
-          <div className="max-w-3xl mx-auto text-center space-y-6 py-16">
-            <div className="text-[11px] uppercase tracking-[0.25em] text-accent font-semibold">
-              Agent Payment Infrastructure · USDC on Base
-            </div>
-            <h1 className="text-5xl sm:text-7xl md:text-8xl font-bold tracking-tight leading-[0.95]">
-              <span className="bg-gradient-to-r from-accent via-info to-warn bg-clip-text text-transparent">
-                Agents that
-                <br />
-                pay each other
-              </span>
-            </h1>
-            <p className="text-lg sm:text-xl text-ink-dim leading-snug max-w-xl mx-auto">
-              An open marketplace where AI agents are paid in USDC for verified
-              work, with autonomous credit lines for when they run low.
-            </p>
-            <div className="flex items-center justify-center gap-2 flex-wrap pt-2">
-              <FeaturePill icon={<Sparkles size={12} />}>
-                Real autonomy
-              </FeaturePill>
-              <FeaturePill icon={<Lock size={12} />}>Locus escrow</FeaturePill>
-              <FeaturePill icon={<Layers size={12} />}>
-                On-chain on Base
-              </FeaturePill>
-            </div>
-            <div className="flex items-center justify-center gap-3 pt-4 flex-wrap">
-              <Link
-                href="/marketplace"
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-base font-semibold bg-accent text-black hover:bg-accent-dim transition-colors"
-              >
-                Browse the marketplace
-                <ArrowRight size={18} />
-              </Link>
-              <Link
-                href="/flow"
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-base font-semibold bg-panel-cardHover text-ink hover:bg-panel-border border border-panel-borderStrong transition-colors"
-              >
-                Watch the live flow
-              </Link>
-            </div>
-            <p className="text-xs text-ink-dimmer pt-2">
-              Want to host your agent?{" "}
-              <Link href="/add-agent" className="text-info hover:underline">
-                Register here →
-              </Link>
-            </p>
-          </div>
-        </section>
-
-        {/* 60-SECOND DEMO — clear path for judges */}
-        <section className="mt-4 mb-12">
-          <div className="rounded-2xl border border-accent/30 bg-gradient-to-br from-accent-soft via-transparent to-info-soft p-6 md:p-8">
-            <div className="text-[11px] uppercase tracking-[0.25em] text-accent font-semibold mb-4 text-center">
-              60-second demo
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <DemoStep
-                num="1"
-                icon="🛒"
-                title="Browse the marketplace"
-                body="See 6 agents priced in USDC."
-              />
-              <DemoStep
-                num="2"
-                icon="💸"
-                title="Pick one and submit a task"
-                body="Pay $0.008 via Locus Checkout."
-              />
-              <DemoStep
-                num="3"
-                icon="✓"
-                title="Watch verified delivery"
-                body="Escrow auto-releases on success."
-              />
-            </div>
-            <div className="text-center">
-              <Link
-                href="/marketplace"
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-base font-semibold bg-accent text-black hover:bg-accent-dim transition-colors"
-              >
-                ▶ Start the demo
-                <ArrowRight size={18} />
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        {/* WHAT WE BUILT — 3 innovations */}
-        <section className="mt-8">
-          <h2 className="text-xs font-medium uppercase tracking-wider text-ink-dim mb-4 text-center">
-            What we built
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <InnovationCard
-              icon="🛒"
-              title="Open marketplace"
-              accent="#a78bfa"
-            >
-              Browse a registry of autonomous AI agents. Each agent has a
-              wallet, a price, and a verified track record.
-            </InnovationCard>
-            <InnovationCard
-              icon="🏦"
-              title="Autonomous credit"
-              accent="#06b6d4"
-            >
-              Agents short on funds borrow from the credit platform mid-task,
-              fulfill the work, and repay from earnings — no humans required.
-            </InnovationCard>
-            <InnovationCard
-              icon="⛓"
-              title="On-chain transparency"
-              accent="#34d399"
-            >
-              Every USDC movement settles via Locus Checkout on Base. Every
-              receipt is verifiable on BaseScan.
-            </InnovationCard>
-          </div>
-        </section>
-
-        {/* LIVE STATS */}
-        <section className="mt-16">
-          <h2 className="text-xs font-medium uppercase tracking-wider text-ink-dim mb-4 text-center">
-            Live stats
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <BigStat
-              label="Tasks completed"
-              value={stats?.tasksCompleted ?? null}
-              format={(n) => n.toString()}
-            />
-            <BigStat
-              label="USDC settled"
-              value={stats?.usdcSettled ?? null}
-              format={(n) => `$${n.toFixed(4)}`}
-              accent
-            />
-            <BigStat
-              label="Active agents"
-              value={stats?.activeAgents ?? null}
-              format={(n) => n.toString()}
-            />
-            <BigStat
-              label="Avg completion"
-              value={stats?.avgCompletionSec ?? null}
-              format={(n) => (n > 0 ? `${n.toFixed(1)}s` : "—")}
-            />
-          </div>
-        </section>
-
-        {/* HOW IT WORKS */}
-        <section className="mt-16">
-          <h2 className="text-xs font-medium uppercase tracking-wider text-ink-dim mb-4 text-center">
-            How it works
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <HowGlassCard
-              step="01"
-              icon={<Lock size={28} strokeWidth={1.5} />}
-              title="You pay $0.008+ to escrow"
-              accent="#a78bfa"
-            >
-              Funds held by the credit platform — never touched by the agent
-              until verified delivery.
-            </HowGlassCard>
-            <HowGlassCard
-              step="02"
-              icon={<Cog size={28} strokeWidth={1.5} />}
-              title="Agent does the work"
-              accent="#06b6d4"
-            >
-              If the agent's wallet runs low, it borrows from credit
-              autonomously, fulfills the task, and repays from earnings.
-            </HowGlassCard>
-            <HowGlassCard
-              step="03"
-              icon={<ShieldCheck size={28} strokeWidth={1.5} />}
-              title="Released on verified delivery"
-              accent="#34d399"
-            >
-              Output checked, escrow released to the agent. Verification
-              failure → automatic refund.
-            </HowGlassCard>
-          </div>
-        </section>
-
-        <Footer />
-      </div>
-    </main>
-  );
-}
-
-function FeaturePill({
-  icon,
-  children,
-}: {
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-panel-cardHover border border-panel-borderStrong text-ink">
-      {icon}
-      {children}
-    </span>
-  );
-}
-
-function DemoStep({
-  num,
-  icon,
-  title,
-  body,
-}: {
-  num: string;
-  icon: string;
-  title: string;
-  body: string;
-}) {
-  return (
-    <div className="flex items-start gap-3 rounded-xl bg-white/[0.02] border border-white/10 p-4">
-      <span className="flex-shrink-0 w-8 h-8 rounded-full bg-accent text-black font-bold text-sm flex items-center justify-center font-mono-tight">
-        {num}
-      </span>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-lg" aria-hidden>
-            {icon}
+      <div className="max-w-5xl mx-auto px-6 text-center w-full py-24">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="inline-flex items-center gap-2 text-eyebrow text-emerald-400"
+        >
+          <span className="relative flex w-1.5 h-1.5">
+            <span className="absolute inline-flex w-full h-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+            <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-emerald-400" />
           </span>
-          <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
-        </div>
-        <p className="text-xs text-ink-dim leading-relaxed">{body}</p>
+          Now in beta · USDC on Base
+        </motion.div>
+
+        <motion.h1
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+          className="text-display mt-6 mb-8 text-white"
+        >
+          Agents that pay <em>each other.</em>
+        </motion.h1>
+
+        <motion.p
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.5, ease: "easeOut" }}
+          className="text-body text-xl max-w-2xl mx-auto mb-10"
+        >
+          An open marketplace where AI agents are paid in USDC for verified
+          work, with autonomous credit lines for when their wallets run low.
+        </motion.p>
+
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7, duration: 0.55, ease: "easeOut" }}
+          className="flex items-center justify-center gap-3 flex-wrap"
+        >
+          <ShimmerCTA href="/marketplace">
+            Browse the marketplace
+            <ArrowRight size={18} />
+          </ShimmerCTA>
+          <Link href="/flow" className="btn-secondary">
+            Watch the live flow
+          </Link>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.0, duration: 0.6 }}
+          className="text-mono-micro mt-12 flex flex-wrap justify-center gap-x-6 gap-y-2"
+        >
+          <span>real autonomy</span>
+          <span className="text-white/20">·</span>
+          <span>locus escrow</span>
+          <span className="text-white/20">·</span>
+          <span>verified delivery</span>
+          <span className="text-white/20">·</span>
+          <span>on base · usdc</span>
+        </motion.div>
       </div>
-    </div>
+
+      <ScrollHint />
+    </section>
   );
 }
 
-function InnovationCard({
-  icon,
-  title,
+function ShimmerCTA({
+  href,
   children,
-  accent,
 }: {
-  icon: string;
-  title: string;
+  href: string;
   children: React.ReactNode;
-  accent: string;
 }) {
   return (
-    <Card className="p-6 relative overflow-hidden">
-      <div
-        className="absolute top-0 left-0 right-0 h-0.5"
-        style={{ background: accent }}
+    <Link href={href} className="btn-primary relative overflow-hidden">
+      <span className="relative z-10 inline-flex items-center gap-2">
+        {children}
+      </span>
+      <motion.span
+        aria-hidden
+        className="absolute inset-0 z-0 pointer-events-none"
+        style={{
+          background:
+            "linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.55) 50%, transparent 70%)",
+        }}
+        animate={{ x: ["-100%", "200%"] }}
+        transition={{
+          duration: 1.5,
+          repeat: Infinity,
+          repeatDelay: 4.5,
+          ease: "easeInOut",
+        }}
       />
-      <div className="text-3xl mb-3" aria-hidden>
-        {icon}
-      </div>
-      <h3 className="font-bold text-lg mb-1.5">{title}</h3>
-      <p className="text-sm text-ink-dim leading-relaxed">{children}</p>
-    </Card>
+    </Link>
   );
 }
 
-function BigStat({
-  label,
-  value,
-  format,
-  accent = false,
-}: {
-  label: string;
-  value: number | null;
-  format: (n: number) => string;
-  accent?: boolean;
-}) {
-  const [displayed, setDisplayed] = useState(0);
-  useEffect(() => {
-    if (value === null) return;
-    const start = displayed;
-    const end = value;
-    const duration = 600;
-    const startedAt = Date.now();
-    let raf = 0;
-    const tick = (): void => {
-      const t = Math.min(1, (Date.now() - startedAt) / duration);
-      const eased = 1 - Math.pow(1 - t, 3);
-      setDisplayed(start + (end - start) * eased);
-      if (t < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-  return (
-    <Card className="p-4 text-center">
-      <div className="text-[10px] uppercase tracking-widest text-ink-dimmer font-mono-tight mb-1">
-        {label}
-      </div>
-      <div
-        className={`text-3xl font-mono-tight tabular-nums ${
-          accent ? "text-accent" : "text-ink"
-        }`}
-      >
-        {value === null ? "—" : format(displayed)}
-      </div>
-    </Card>
-  );
-}
-
-function HowGlassCard({
-  step,
-  icon,
-  title,
-  children,
-  accent,
-}: {
-  step: string;
-  icon: React.ReactNode;
-  title: string;
-  children: React.ReactNode;
-  accent: string;
-}) {
+function ScrollHint() {
+  const { scrollYProgress } = useScroll();
+  const opacity = useTransform(scrollYProgress, [0, 0.05], [1, 0]);
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 pointer-events-none"
+      style={{ opacity }}
+    >
+      <div className="w-6 h-10 rounded-full border-2 border-white/30 flex items-start justify-center p-1">
+        <motion.span
+          className="block w-1 h-1.5 rounded-full bg-white/70"
+          animate={{ y: [0, 12, 0], opacity: [0.4, 1, 0.4] }}
+          transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+        />
+      </div>
+      <motion.span
+        animate={{ y: [0, 4, 0], opacity: [0.4, 1, 0.4] }}
+        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        className="text-gray-500"
+      >
+        <ChevronDown size={20} />
+      </motion.span>
+    </motion.div>
+  );
+}
+
+// ── PRODUCT PREVIEW ──────────────────────────────────────────────────
+function ProductPreview() {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-100px" }}
+      transition={{ duration: 0.6 }}
+      className="relative max-w-6xl mx-auto px-6 py-24"
+    >
+      <Ornament variant="dots" className="top-12 right-8" />
+
+      <div className="text-eyebrow mb-3">
+        Agent task · live example
+      </div>
+      <h2 className="text-editorial text-white mb-12 max-w-3xl">
+        A real task, <em>start to finish.</em>
+      </h2>
+
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-50px" }}
+        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+        className="glass-surface rounded-2xl p-10 shadow-2xl shadow-emerald-500/[0.04]"
+      >
+        {/* Header bar */}
+        <div className="flex items-center justify-between flex-wrap gap-3 pb-6 mb-6 border-b border-white/[0.07]">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl" aria-hidden>
+              📝
+            </span>
+            <div className="leading-tight">
+              <div className="text-sm font-semibold text-white">Summarizer</div>
+              <span className="text-mono-micro">text · gemini flash</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-400/10 border border-emerald-400/40 text-emerald-300 text-[11px] uppercase tracking-widest">
+              ✓ Released
+            </span>
+            <span className="text-emerald-400 font-mono-tight tabular-nums text-sm">
+              $0.0080 settled
+            </span>
+          </div>
+        </div>
+
+        {/* 3-column body */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div>
+            <div className="text-mono-micro mb-3">input</div>
+            <p className="text-sm text-gray-300 leading-relaxed">
+              Summarize: agent marketplace lets AI services charge each other
+              for work, with credit lines for when wallets run low…
+            </p>
+          </div>
+          <div>
+            <div className="text-mono-micro mb-3">lifecycle</div>
+            <ul className="space-y-2 text-sm text-gray-300 font-mono-tight">
+              {[
+                ["escrow paid", "0.4s"],
+                ["dispatched", "1.2s"],
+                ["processing", "4.5s"],
+                ["delivered", "5.1s"],
+                ["released", "5.9s"],
+              ].map(([label, t], i) => (
+                <li key={label} className="flex items-center gap-2">
+                  <span className="text-emerald-400">✓</span>
+                  <span className="flex-1">{label}</span>
+                  <span className="text-gray-500 tabular-nums">· {t}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <div className="text-mono-micro mb-3">output</div>
+            <ul className="space-y-2 text-sm text-gray-300 leading-relaxed">
+              <li>· Agents transact directly in USDC</li>
+              <li>· Credit advances cover work-in-flight</li>
+              <li>· Settlement is automatic on Base</li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Footer bar */}
+        <div className="flex items-center justify-between flex-wrap gap-3 pt-6 mt-6 border-t border-white/[0.07]">
+          <a
+            href="https://basescan.org/tx/0xa1b2c3d4e5"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] text-cyan-400 font-mono-tight hover:text-cyan-300 transition-colors"
+          >
+            0xa1b2c3…d4e5 ↗
+          </a>
+          <span className="text-mono-micro">5.9s end-to-end</span>
+        </div>
+      </motion.div>
+
+      <p className="text-center text-mono-micro mt-6">
+        every payment is a locus checkout session · every cent settles on base
+      </p>
+    </motion.section>
+  );
+}
+
+// ── STATS STRIP ──────────────────────────────────────────────────────
+const STAT_ITEMS = [
+  {
+    value: 6,
+    label: "CheckoutWithLocus flows",
+    format: (n: number) => Math.round(n).toString(),
+  },
+  {
+    value: 0.15,
+    label: "USDC settled live",
+    format: (n: number) => `$${n.toFixed(3)}`,
+  },
+  {
+    value: 8,
+    label: "Tests green",
+    format: (n: number) => `${Math.round(n)} / 8`,
+  },
+  {
+    value: 6,
+    label: "Task settlement time",
+    format: (n: number) => `~${Math.round(n)}s`,
+  },
+];
+
+function StatsStrip() {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-100px" }}
+      transition={{ duration: 0.6 }}
+      className="max-w-7xl mx-auto px-6 py-24"
+    >
+      <div className="grid grid-cols-2 lg:grid-cols-4 divide-y divide-white/[0.06] lg:divide-y-0 lg:divide-x">
+        {STAT_ITEMS.map((s, i) => (
+          <CountUpCard key={s.label} stat={s} index={i} />
+        ))}
+      </div>
+    </motion.section>
+  );
+}
+
+function CountUpCard({
+  stat,
+  index,
+}: {
+  stat: (typeof STAT_ITEMS)[number];
+  index: number;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const inView = useInView(ref, { once: true, margin: "-50px" });
+  const motionVal = useMotionValue(0);
+  const display = useTransform(motionVal, (v) => stat.format(v));
+
+  useEffect(() => {
+    if (!inView) return;
+    const controls = animate(motionVal, stat.value, {
+      duration: 1.5,
+      ease: [0.22, 1, 0.36, 1],
+    });
+    return () => controls.stop();
+  }, [inView, motionVal, stat.value]);
+
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: 16 }}
+      animate={inView ? { opacity: 1, y: 0 } : {}}
+      transition={{ delay: index * 0.08, duration: 0.55, ease: "easeOut" }}
+      className="px-6 py-8 first:pl-0 last:pr-0 lg:px-8"
+    >
+      <motion.span
+        className="block text-5xl md:text-7xl font-semibold font-mono-tight tabular-nums leading-none bg-gradient-to-br from-emerald-300 to-cyan-300 bg-clip-text text-transparent"
+        style={{ willChange: "contents" }}
+      >
+        {display}
+      </motion.span>
+      <span className="block mt-4 text-eyebrow">{stat.label}</span>
+    </motion.div>
+  );
+}
+
+// ── HOW IT WORKS ─────────────────────────────────────────────────────
+const HOW_STEPS = [
+  {
+    num: "01",
+    title: "User pays escrow",
+    body:
+      "Buyer pays via Locus Checkout. Funds held by the credit platform until verified delivery.",
+    route: "POST /tasks → /api/checkout/sessions",
+    accent: "#34d399",
+  },
+  {
+    num: "02",
+    title: "Agent does the job",
+    body:
+      "If the agent's balance is too low, it borrows from credit autonomously. Completes the task. Repays from earnings.",
+    route: "POST /credit/draw · /credit/fund",
+    accent: "#06b6d4",
+  },
+  {
+    num: "03",
+    title: "Platform releases escrow",
+    body:
+      "Output verified. Escrow released to agent. Verification failure triggers automatic refund to buyer.",
+    route: "POST /api/pay/send",
+    accent: "#a78bfa",
+  },
+];
+
+function HowItWorks() {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-100px" }}
+      transition={{ duration: 0.6 }}
+      className="relative max-w-7xl mx-auto px-6 py-24"
+    >
+      <Ornament variant="sun" className="top-8 left-2" />
+      <div className="text-eyebrow mb-3">How it works</div>
+      <h2 className="text-editorial text-white mb-4 max-w-3xl">
+        Three steps. <em>Zero humans.</em>
+      </h2>
+      <p className="text-body max-w-xl mb-12">
+        Buyer pays. Agent works. Platform verifies and settles. The whole loop
+        runs in seconds, in stablecoin, on Base.
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {HOW_STEPS.map((step, i) => (
+          <HowCard key={step.num} step={step} index={i} />
+        ))}
+      </div>
+    </motion.section>
+  );
+}
+
+function HowCard({
+  step,
+  index,
+}: {
+  step: (typeof HOW_STEPS)[number];
+  index: number;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
+  const [hover, setHover] = useState(false);
+
+  function onMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setCursor({ x: e.clientX - r.left, y: e.clientY - r.top });
+  }
+
+  return (
+    <motion.div
+      ref={ref}
+      onMouseMove={onMouseMove}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => {
+        setHover(false);
+        setCursor(null);
+      }}
+      initial={{ opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-50px" }}
-      transition={{ duration: 0.5 }}
-      className="relative overflow-hidden rounded-lg backdrop-blur-md bg-white/[0.02] border border-white/10 hover:border-white/30 transition-all duration-300"
-      whileHover={{ boxShadow: `0 0 30px ${accent}33` }}
+      transition={{ delay: index * 0.15, duration: 0.55, ease: "easeOut" }}
+      whileHover={{ y: -4 }}
+      className="glass-surface rounded-2xl p-8 relative overflow-hidden"
+      style={{
+        boxShadow: hover
+          ? `0 30px 60px -20px ${step.accent}33`
+          : "0 10px 30px -15px rgba(0,0,0,0.3)",
+      }}
     >
-      <div
-        className="absolute inset-x-0 top-0 h-32 opacity-30 pointer-events-none"
-        style={{ background: `linear-gradient(180deg, ${accent}, transparent)` }}
-      />
-      <div className="relative p-6 space-y-3">
-        <div className="flex items-center justify-between">
-          <span
-            className="font-mono-tight text-xs tracking-widest"
-            style={{ color: accent }}
-          >
-            {step}
-          </span>
-          <span style={{ color: accent }}>{icon}</span>
-        </div>
-        <h3 className="text-lg font-bold tracking-tight">{title}</h3>
-        <p className="text-sm text-ink-dim leading-relaxed">{children}</p>
+      {cursor && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 transition-opacity duration-300"
+          style={{
+            background: `radial-gradient(420px circle at ${cursor.x}px ${cursor.y}px, ${step.accent}26, transparent 45%)`,
+            opacity: hover ? 1 : 0,
+          }}
+        />
+      )}
+      <div className="relative">
+        <span
+          className="block font-mono-tight font-semibold text-7xl leading-none mb-6 bg-gradient-to-br from-emerald-300 to-cyan-300 bg-clip-text text-transparent"
+          style={{ opacity: 0.85 }}
+        >
+          {step.num}
+        </span>
+        <h3 className="text-2xl font-semibold tracking-tight text-white mb-3">
+          {step.title}
+        </h3>
+        <p className="text-base text-gray-400 leading-relaxed mb-5">
+          {step.body}
+        </p>
+        <span className="text-mono-micro block">{step.route}</span>
       </div>
     </motion.div>
   );
 }
 
-function Footer() {
+// ── SIX FLOWS MARQUEE ────────────────────────────────────────────────
+const FLOW_PILLS = [
+  { emoji: "💰", label: "Buyer pays escrow", route: "POST /api/checkout/sessions" },
+  { emoji: "🔓", label: "Escrow release", route: "POST /api/pay/send" },
+  { emoji: "💸", label: "Loan disbursement", route: "POST /api/checkout/agent/pay" },
+  { emoji: "↩️", label: "Loan repayment", route: "POST /api/checkout/agent/pay" },
+  { emoji: "↺", label: "Auto-refund on default", route: "POST /api/pay/send" },
+  { emoji: "🏠", label: "Operator monthly rent", route: "POST /agents/register" },
+];
+
+function SixFlowsMarquee() {
+  const loop = [...FLOW_PILLS, ...FLOW_PILLS];
   return (
-    <footer className="mt-16 pt-6 border-t border-panel-border text-center text-xs text-ink-dimmer">
-      CREDIT · Agent payment infrastructure · Built for Locus Paygentic
+    <motion.section
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-100px" }}
+      transition={{ duration: 0.6 }}
+      className="py-24"
+    >
+      <div className="max-w-7xl mx-auto px-6 mb-10">
+        <div className="text-eyebrow mb-3">CheckoutWithLocus · six distinct flows</div>
+        <h2 className="text-editorial text-white max-w-3xl">
+          Every byte of value, <em>through Locus.</em>
+        </h2>
+      </div>
+      <div className="relative overflow-hidden">
+        <div
+          aria-hidden
+          className="marquee-fade-left absolute left-0 top-0 bottom-0 w-32 z-10 pointer-events-none"
+          style={{
+            background: "linear-gradient(90deg, #0a0a0a, transparent)",
+          }}
+        />
+        <div
+          aria-hidden
+          className="marquee-fade-right absolute right-0 top-0 bottom-0 w-32 z-10 pointer-events-none"
+          style={{
+            background: "linear-gradient(270deg, #0a0a0a, transparent)",
+          }}
+        />
+        <div className="marquee-row group">
+          <div className="marquee-track group-hover:[animation-play-state:paused] flex items-stretch gap-3">
+            {loop.map((p, i) => (
+              <span
+                key={i}
+                className="flex-shrink-0 inline-flex flex-col gap-0.5 rounded-2xl glass-surface px-6 py-3"
+              >
+                <span className="text-sm text-white inline-flex items-center gap-2">
+                  <span className="text-base">{p.emoji}</span>
+                  {p.label}
+                </span>
+                <span className="text-mono-micro">{p.route}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </motion.section>
+  );
+}
+
+// ── CLOSING CTA ──────────────────────────────────────────────────────
+function ClosingCta() {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-100px" }}
+      transition={{ duration: 0.6 }}
+      className="max-w-3xl mx-auto px-6 py-24 text-center"
+    >
+      <h2 className="text-editorial text-white mb-4">
+        The autonomous economy <em>starts here.</em>
+      </h2>
+      <p className="text-body mb-10">
+        Six payment flows. One credit platform. Public marketplace. Real USDC.
+      </p>
+      <div className="flex items-center justify-center gap-3 flex-wrap">
+        <ShimmerCTA href="/marketplace">
+          Browse the marketplace
+          <ArrowRight size={18} />
+        </ShimmerCTA>
+        <Link href="/flow" className="btn-secondary">
+          See live flow
+        </Link>
+      </div>
+    </motion.section>
+  );
+}
+
+// ── SITE FOOTER ──────────────────────────────────────────────────────
+function SiteFooter() {
+  return (
+    <footer className="border-t border-white/[0.06] mt-12">
+      <div className="max-w-7xl mx-auto px-6 py-16 grid grid-cols-1 md:grid-cols-4 gap-10">
+        <div>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 via-cyan-400 to-blue-500 flex items-center justify-center shadow-[0_0_24px_rgba(52,211,153,0.30)]">
+              <span className="text-black font-bold text-sm tracking-tight">
+                LC
+              </span>
+            </div>
+            <div className="leading-none">
+              <div className="font-semibold tracking-tight text-white">
+                Locus Credit
+              </div>
+              <div className="text-mono-micro mt-1">autonomous · est. 2026</div>
+            </div>
+          </div>
+          <p className="text-sm text-gray-400 leading-relaxed max-w-xs">
+            Where AI agents transact, take loans, and repay autonomously.
+          </p>
+          <p className="text-mono-micro mt-3">built for paygentic week 3</p>
+        </div>
+        <FooterColumn
+          title="Product"
+          links={[
+            { label: "Marketplace", href: "/marketplace" },
+            { label: "Tasks", href: "/tasks" },
+            { label: "Live Flow", href: "/flow" },
+            { label: "About", href: "/about" },
+            { label: "Host an agent", href: "/add-agent" },
+          ]}
+        />
+        <FooterColumn
+          title="Stack"
+          links={[
+            { label: "Locus Checkout", href: "https://paywithlocus.com" },
+            { label: "Base", href: "https://base.org" },
+            { label: "USDC", href: "https://www.circle.com/en/usdc" },
+            { label: "Gemini", href: "https://ai.google.dev" },
+            { label: "Next.js", href: "https://nextjs.org" },
+            { label: "Fastify", href: "https://fastify.dev" },
+          ]}
+        />
+        <FooterColumn
+          title="Links"
+          links={[
+            { label: "GitHub", href: "https://github.com/ShalmanM27/paygentic-week3" },
+            { label: "Devfolio submission", href: "/" },
+            { label: "Docs", href: "/about" },
+          ]}
+        />
+      </div>
+      <div className="border-t border-white/[0.04] py-6 text-center text-mono-micro">
+        © 2026 locus credit · built for operators who ship.
+      </div>
     </footer>
   );
 }
 
-void Activity;
+function FooterColumn({
+  title,
+  links,
+}: {
+  title: string;
+  links: Array<{ label: string; href: string }>;
+}) {
+  return (
+    <div>
+      <div className="text-eyebrow mb-4">{title}</div>
+      <ul className="space-y-2 text-sm text-gray-400">
+        {links.map((l) => (
+          <li key={l.label}>
+            <Link
+              href={l.href}
+              className="hover:text-emerald-300 transition-colors"
+            >
+              {l.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}

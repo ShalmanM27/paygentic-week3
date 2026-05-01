@@ -1,6 +1,8 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import { Inter, IBM_Plex_Mono } from "next/font/google";
+import { AmbientBackground } from "../components/AmbientBackground";
+import { ScrollProgress } from "../components/ScrollProgress";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -23,7 +25,11 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${mono.variable}`}>
-      <body className="bg-panel text-ink min-h-screen">{children}</body>
+      <body className="bg-panel text-ink min-h-screen relative">
+        <AmbientBackground />
+        <ScrollProgress />
+        {children}
+      </body>
     </html>
   );
 }

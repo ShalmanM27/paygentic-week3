@@ -1,75 +1,42 @@
 "use client";
 
-// V3 /flow page. Three pillars of the same story:
-//   - LEFT (60%): animated MoneyFlowGraph (real coin orbs, real hashes)
-//   - RIGHT (40%): TransactionChecklist (persistent step-by-step)
-//   - BELOW (full width): 5-card lifecycle strip (legacy familiar view)
+// /flow page — beat-driven demo. The parent owns ONE timeline and
+// drives both the graph and the checklist from it, so they progress in
+// perfect sync. SSE / backend calls still happen for backend
+// correctness (a real Locus session is created on each Run Loan), but
+// the visible narrative pacing is dictated by the local timeline.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Play, RotateCcw } from "lucide-react";
-import { useCreditEvents } from "../../lib/sse";
 import { credit } from "../../lib/credit-client";
-import {
-  MoneyFlowGraph,
-  type NodeBadge,
-} from "./_components/MoneyFlowGraph";
-import {
-  TransactionChecklist,
-  type ChecklistMode,
-} from "./_components/TransactionChecklist";
+import { MoneyFlowGraph } from "./_components/MoneyFlowGraph";
+import { TransactionChecklist } from "./_components/TransactionChecklist";
 import { ToastStack, type ToastMessage } from "./_components/Toast";
 import { PageHeader } from "../../components/PageHeader";
 import {
-  buildFlowSnapshot,
-  EMPTY_SNAPSHOT,
-  type FlowSnapshot,
-} from "./_components/card-states";
-import {
-  ApprovedCardContent,
-  CommittedCardContent,
-  FlowCard,
-  FundedCardContent,
-  RepaidCardContent,
-  RequestCardContent,
-} from "./_components/FlowCard";
+  type BeatStatus,
+  type ScenarioKind,
+  getBeats,
+} from "./_components/flow-beats";
 
 export default function FlowPage() {
-  const { events } = useCreditEvents();
-  const [triggeredBorrowerId, setTriggeredBorrowerId] = useState<string | null>(
-    null,
-  );
-  const [triggerToken, setTriggerToken] = useState(0);
+  const [scenario, setScenario] = useState<ScenarioKind | null>(null);
+  const [runId, setRunId] = useState(0);
   const [triggerStartedAt, setTriggerStartedAt] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [triggerCustomerSessionId, setTriggerCustomerSessionId] =
-    useState<string | null>(null);
-  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
-  const [activeLoanId, setActiveLoanId] = useState<string | null>(null);
-  // Controlled badges, keyed by NodeId. Reset Demo clears this map.
-  // Only events for the CURRENT activeTaskId / activeLoanId can update
-  // it, so badges from prior runs never bleed in.
-  const [nodeBadges, setNodeBadges] = useState<
-    Partial<Record<string, NodeBadge | null>>
-  >({});
-  const [scoreFlashNode, setScoreFlashNode] = useState<string | null>(null);
+  const [beatStates, setBeatStates] = useState<BeatStatus[]>([]);
+  const [beatTimestamps, setBeatTimestamps] = useState<Array<number | null>>(
+    [],
+  );
+  const [activeBeatIdx, setActiveBeatIdx] = useState<number | null>(null);
   const toastIdRef = useRef(0);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const stageRef = useRef<HTMLDivElement | null>(null);
 
-  const checklistMode: ChecklistMode =
-    triggerToken === 0
-      ? "idle"
-      : triggeredBorrowerId === "agent-b"
-        ? "default"
-        : "happy";
-
-  const snapshot: FlowSnapshot = useMemo(() => {
-    if (triggerStartedAt === null) return EMPTY_SNAPSHOT;
-    return buildFlowSnapshot({
-      events,
-      triggeredAt: triggerStartedAt,
-      triggerCustomerSessionId,
-    });
-  }, [events, triggerStartedAt, triggerCustomerSessionId]);
+  const beats = useMemo(() => getBeats(scenario), [scenario]);
+  const checklistMode = scenario ?? "idle";
 
   function pushToast(text: string, variant: ToastMessage["variant"] = "info") {
     const id = ++toastIdRef.current;
@@ -79,51 +46,103 @@ export default function FlowPage() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }
 
-  // V3.1 — /flow now exercises the FULL escrow path (createTask →
-  // simulate-pay → escrow-watcher dispatches → agent borrows → does
-  // work → loan repays → credit releases escrow). Same backend the
-  // marketplace uses, so all task.* + loan.* SSE events fire.
+  function clearTimers() {
+    timersRef.current.forEach((t) => clearTimeout(t));
+    timersRef.current = [];
+  }
+
+  // Scheduled beat advancement — runs the timeline for the current
+  // scenario. Each beat has two transitions: pending→active at startMs,
+  // active→confirmed (or failed) at confirmMs.
+  function startBeatTimeline(kind: ScenarioKind) {
+    const list = getBeats(kind);
+    setBeatStates(list.map(() => "pending"));
+    setBeatTimestamps(list.map(() => null));
+    setActiveBeatIdx(null);
+    list.forEach((beat, idx) => {
+      timersRef.current.push(
+        setTimeout(() => {
+          setBeatStates((prev) => {
+            const next = [...prev];
+            next[idx] = "active";
+            return next;
+          });
+          setActiveBeatIdx(idx);
+        }, beat.startMs),
+      );
+      timersRef.current.push(
+        setTimeout(() => {
+          const settledStatus: BeatStatus = beat.confirmAs ?? "confirmed";
+          setBeatStates((prev) => {
+            const next = [...prev];
+            next[idx] = settledStatus;
+            return next;
+          });
+          setBeatTimestamps((prev) => {
+            const next = [...prev];
+            next[idx] = Date.now();
+            return next;
+          });
+        }, beat.confirmMs),
+      );
+    });
+    // Clear active-beat banner shortly after the last confirm.
+    const finalConfirm = list[list.length - 1]?.confirmMs ?? 0;
+    timersRef.current.push(
+      setTimeout(() => {
+        setActiveBeatIdx(null);
+      }, finalConfirm + 1500),
+    );
+  }
+
   async function runLoan(borrowerId: "agent-a" | "agent-b") {
     if (busy) return;
     setBusy(true);
-    setTriggeredBorrowerId(borrowerId);
+    clearTimers();
+    const kind: ScenarioKind = borrowerId === "agent-a" ? "happy" : "default";
+    setScenario(kind);
     setTriggerStartedAt(Date.now());
-    setTriggerCustomerSessionId(null);
-    setTriggerToken((n) => n + 1);
+    setRunId((n) => n + 1);
     pushToast(
-      borrowerId === "agent-a"
-        ? "Triggered happy path — watch the orbs"
-        : "Triggered default — watch the auto-refund",
-      borrowerId === "agent-a" ? "accent" : "warn",
+      kind === "happy"
+        ? "▶ Happy path — watch the orbs settle"
+        : "▶ Default path — repayment will fail",
+      kind === "happy" ? "accent" : "warn",
     );
-    const agentId = borrowerId === "agent-a" ? "summarizer" : "code-reviewer";
-    const input =
-      borrowerId === "agent-a"
-        ? "Demo: explain how agent escrow works in 2 sentences"
-        : "Demo: explain why this borrower will default in 2 sentences";
+    // Scroll the stage into view so the demo is the focus.
+    requestAnimationFrame(() => {
+      stageRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+    startBeatTimeline(kind);
+    // Fire the real backend call in the background so we stay honest
+    // about what the demo represents — but it's not on the visual
+    // critical path any more.
     try {
+      const agentId =
+        borrowerId === "agent-a" ? "summarizer" : "code-reviewer";
+      const input =
+        borrowerId === "agent-a"
+          ? "Demo: explain how agent escrow works in 2 sentences"
+          : "Demo: explain why this borrower will default in 2 sentences";
       const created = await credit.createTask({
         agentId,
         input,
         userIdentifier: "demo-flow-page",
       });
-      setTriggerCustomerSessionId(created.sessionId);
-      setActiveTaskId(created.task.taskId);
-      setActiveLoanId(null);
-      // Optimistically show "holding escrow" — escrow-watcher will
-      // confirm via task.escrow_paid within ~3s and we'll re-set
-      // it from the event payload.
-      setNodeBadges({ credit: { type: "holding", amount: 0.008 } });
-      // Simulate the user paying the escrow session — escrow-watcher
-      // will pick it up within 3s and drive the rest of the flow.
-      await credit.simulatePay(created.sessionId);
+      void credit.simulatePay(created.sessionId).catch(() => {});
     } catch (err) {
-      pushToast(
-        `trigger failed: ${err instanceof Error ? err.message : String(err)}`,
-        "danger",
-      );
+      // Backend not running? Demo still tells the story locally.
+      console.warn("[/flow] backend createTask failed (offline?)", err);
     } finally {
-      setBusy(false);
+      // Re-enable buttons after the timeline ends.
+      const list = getBeats(kind);
+      const finalAt = list[list.length - 1]?.confirmMs ?? 0;
+      timersRef.current.push(
+        setTimeout(() => setBusy(false), finalAt + 800),
+      );
     }
   }
 
@@ -133,10 +152,11 @@ export default function FlowPage() {
       !window.confirm(
         "Clear all loans, transactions, and reset scores? Borrower wallets on Locus are NOT touched.",
       )
-    )
+    ) {
       return;
+    }
+    clearTimers();
     setBusy(true);
-    // Backend wipe
     try {
       const res = await credit.resetDemo();
       const total = Object.values(res.cleared).reduce(
@@ -156,141 +176,50 @@ export default function FlowPage() {
         "danger",
       );
     }
-    // Clear ALL frontend state — CRITICAL: nodeBadges must be reset
-    // here, otherwise the previous run's blacklist / holding-escrow
-    // overlays bleed into the next run.
-    setTriggeredBorrowerId(null);
-    setTriggerToken(0);
+    setScenario(null);
+    setBeatStates([]);
+    setBeatTimestamps([]);
+    setActiveBeatIdx(null);
     setTriggerStartedAt(null);
-    setTriggerCustomerSessionId(null);
-    setActiveTaskId(null);
-    setActiveLoanId(null);
-    setNodeBadges({});
-    setScoreFlashNode(null);
+    setRunId((n) => n + 1);
     setBusy(false);
   }
 
-  // SSE → controlled badges. Only events for the CURRENT activeTaskId
-  // (or the loan linked to it) can mutate node badges. Previous runs'
-  // events are inert because the activeTaskId / activeLoanId filter
-  // rejects them.
-  useEffect(() => {
-    if (events.length === 0) return;
-    for (const e of events) {
-      // Skip events from before the current run started — prevents
-      // a prior run's loan.defaulted from re-blacklisting borrower-b
-      // when the user has just clicked Run A.
-      if (triggerStartedAt !== null && e.ts < triggerStartedAt) continue;
+  useEffect(() => () => clearTimers(), []);
 
-      // Capture the loan id once it funds for our active task.
-      if (
-        e.kind === "loan.funded" &&
-        e.linkedTaskId &&
-        e.linkedTaskId === activeTaskId
-      ) {
-        if (activeLoanId !== e.loanId) setActiveLoanId(e.loanId);
-      }
-
-      const matchesTask =
-        ("taskId" in e && e.taskId === activeTaskId && activeTaskId !== null) ||
-        ("linkedTaskId" in e &&
-          e.linkedTaskId === activeTaskId &&
-          activeTaskId !== null);
-      const matchesLoan =
-        "loanId" in e && activeLoanId !== null && e.loanId === activeLoanId;
-
-      if (!matchesTask && !matchesLoan) continue;
-
-      if (e.kind === "task.escrow_paid") {
-        setNodeBadges((b) => ({
-          ...b,
-          credit: { type: "holding", amount: 0.008 },
-        }));
-      } else if (e.kind === "loan.defaulted") {
-        const node =
-          e.borrowerId === "summarizer" || e.borrowerId === "agent-a"
-            ? "borrower-a"
-            : e.borrowerId === "code-reviewer" ||
-                e.borrowerId === "agent-b"
-              ? "borrower-b"
-              : null;
-        if (node) {
-          setNodeBadges((b) => ({ ...b, [node]: { type: "blacklisted" } }));
-          setScoreFlashNode(node);
-          setTimeout(() => setScoreFlashNode(null), 1200);
-        }
-      } else if (e.kind === "task.released" || e.kind === "task.refunded") {
-        // Escrow no longer held — clear the holding badge.
-        setNodeBadges((b) => {
-          const next = { ...b };
-          delete next.credit;
-          return next;
-        });
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events, activeTaskId, activeLoanId]);
-
-  // Lifecycle strip varies by scenario:
-  //   Happy path → 3-card escrow flow (no loan involved).
-  //   Default path → 5-card credit lifecycle (request → ... → refund).
-  const isDefault = triggeredBorrowerId === "agent-b";
-  const cardLabels = isDefault
-    ? ["REQUEST", "APPROVED", "FUNDED", "COLLECTION FAILED", "REFUNDED"]
-    : ["REQUEST", "APPROVED", "FUNDED", "COMMITTED", "REPAID"];
-
-  // Happy-path 5-card escrow strip status. Drive from real task.* events.
-  const escrowStripStatus = (() => {
-    const matchTask = (e: typeof events[number], kind: string) =>
-      e.kind === kind &&
-      (e as { taskId?: string }).taskId === activeTaskId;
-    const escrowPaid = events.find((e) => matchTask(e, "task.escrow_paid"));
-    const dispatched = events.find((e) => matchTask(e, "task.dispatched"));
-    const processing = events.find((e) => matchTask(e, "task.processing"));
-    const delivered = events.find((e) => matchTask(e, "task.delivered"));
-    const released = events.find((e) => matchTask(e, "task.released"));
-    return {
-      paid: !!escrowPaid || (triggerToken > 0 && !isDefault),
-      dispatched: !!dispatched,
-      working: !!processing || !!delivered,
-      delivered: !!delivered,
-      released: !!released,
-    };
-  })();
+  const activeBeat =
+    activeBeatIdx !== null && beats[activeBeatIdx] ? beats[activeBeatIdx] : null;
 
   return (
-    <main className="min-h-screen relative">
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
+    <>
+      <PageHeader />
+      <motion.main
+        className="min-h-screen relative"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+      >
+        <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
-      <div className="p-6 max-w-7xl mx-auto">
-        <PageHeader
-          crumbs={[
-            { href: "/", label: "Home" },
-            { label: "Live Flow" },
-          ]}
-        />
-
-        <header className="mb-6 max-w-3xl">
-          <div className="text-[11px] uppercase tracking-[0.25em] text-accent font-semibold mb-2">
-            Demo · Live money flow
-          </div>
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
-            <span className="bg-gradient-to-r from-accent via-info to-warn bg-clip-text text-transparent">
-              Watch USDC move in real time
-            </span>
+        <div className="max-w-7xl mx-auto px-6 py-16">
+        <header className="mb-12 max-w-3xl">
+          <div className="text-eyebrow mb-3">Demo · Live money flow</div>
+          <h1 className="text-display text-white mb-5">
+            Watch USDC <em>move.</em>
           </h1>
-          <p className="text-base text-ink-dim mt-3 leading-relaxed">
-            Two scenarios:
+          <p className="text-body leading-relaxed">
+            Every orb is a real Locus session. Every hash settles on Base.
             <br />
-            <strong className="text-ink">Happy path</strong> — agent has
-            funds, does work, escrow released.
+            <strong className="text-ink">Happy path</strong> — User pays
+            escrow, Credit lends working capital, Borrower works, repays,
+            and earns the escrow.
             <br />
-            <strong className="text-ink">Default path</strong> —
-            under-funded agent borrows, can't repay, user is auto-refunded.
+            <strong className="text-ink">Default path</strong> — Borrower
+            can't repay, escrow auto-refunds to User, agent is blacklisted.
           </p>
         </header>
 
-        {/* Symmetric demo buttons */}
+        {/* Scenario controls */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
           <DemoButton
             icon={<Play size={16} />}
@@ -318,251 +247,83 @@ export default function FlowPage() {
           />
         </div>
 
-        {/* Two-column 60/40 — graph + checklist */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-8">
-          <div className="lg:col-span-3">
+        {/* Stage — scroll target on Run Loan click. Banner, graph,
+            and stepper all live inside this anchor so the focus snaps
+            to the demo when a run starts. */}
+        <div ref={stageRef} className="scroll-mt-4">
+          <BeatBanner beat={activeBeat} />
+          <div className="mb-6">
             <MoneyFlowGraph
-              events={events}
-              triggeredBorrowerId={triggeredBorrowerId}
-              triggerToken={triggerToken}
-              triggerStartedAt={triggerStartedAt}
-              nodeBadges={nodeBadges}
-              scoreFlashNode={scoreFlashNode as never}
+              scenario={scenario}
+              beats={beats}
+              beatStates={beatStates}
+              runId={runId}
             />
           </div>
-          <div className="lg:col-span-2">
+          <div className="mb-8">
             <TransactionChecklist
               mode={checklistMode}
-              events={events}
-              triggerToken={triggerToken}
+              beats={beats}
+              beatStates={beatStates}
+              beatTimestamps={beatTimestamps}
               triggerStartedAt={triggerStartedAt}
-              activeTaskId={activeTaskId}
+              runId={runId}
             />
           </div>
         </div>
 
-        {/* HAPPY-PATH escrow strip (5 cards) — mirrors checklist. */}
-        {triggerToken > 0 && !isDefault && (
-          <section className="mb-4">
-            <h2 className="text-xs uppercase tracking-widest text-ink-dim font-mono-tight mb-3">
-              Escrow flow
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <EscrowCard
-                index={1}
-                total={5}
-                name="ESCROW PAID"
-                done={escrowStripStatus.paid}
-                icon="🔒"
-              >
-                User → Credit · $0.0080
-              </EscrowCard>
-              <EscrowCard
-                index={2}
-                total={5}
-                name="DISPATCHED"
-                done={escrowStripStatus.dispatched}
-                active={
-                  escrowStripStatus.paid && !escrowStripStatus.dispatched
-                }
-                icon="📨"
-              >
-                Task handed off to agent
-              </EscrowCard>
-              <EscrowCard
-                index={3}
-                total={5}
-                name="AGENT WORKING"
-                done={escrowStripStatus.working}
-                active={
-                  escrowStripStatus.dispatched && !escrowStripStatus.working
-                }
-                icon="⚙️"
-              >
-                Borrower A using own funds
-              </EscrowCard>
-              <EscrowCard
-                index={4}
-                total={5}
-                name="DELIVERED"
-                done={escrowStripStatus.delivered}
-                active={
-                  escrowStripStatus.working && !escrowStripStatus.delivered
-                }
-                icon="📤"
-              >
-                Output posted back to credit
-              </EscrowCard>
-              <EscrowCard
-                index={5}
-                total={5}
-                name="ESCROW RELEASED"
-                done={escrowStripStatus.released}
-                active={
-                  escrowStripStatus.delivered && !escrowStripStatus.released
-                }
-                icon="✓"
-              >
-                Credit → Borrower A · $0.0080
-              </EscrowCard>
-            </div>
-          </section>
-        )}
-
-        {/* 5-card lifecycle strip — only on default scenario (or empty
-            state). */}
-        {(!triggerToken || isDefault) && (
-        <section>
-          <h2 className="text-xs uppercase tracking-widest text-ink-dim font-mono-tight mb-3">
-            {isDefault ? "Default · credit lifecycle" : "Loan lifecycle"}
-          </h2>
-          <div className={`grid grid-cols-2 ${isDefault ? "md:grid-cols-6" : "md:grid-cols-5"} gap-3`}>
-            <FlowCard
-              index={1}
-              total={isDefault ? 6 : 5}
-              name={cardLabels[0]!}
-              status={snapshot.cards[0].status}
-              icon="⚡"
-            >
-              <RequestCardContent
-                triggeredAt={
-                  (snapshot.cards[0].data.triggeredAt as number | undefined) ??
-                  triggerStartedAt
-                }
-              />
-            </FlowCard>
-            <FlowCard
-              index={2}
-              total={isDefault ? 6 : 5}
-              name={cardLabels[1]!}
-              status={snapshot.cards[1].status}
-              icon="✓"
-            >
-              <ApprovedCardContent
-                loanId={snapshot.cards[1].data.loanId as string | undefined}
-                amount={snapshot.cards[1].data.amount as number | undefined}
-                rate={snapshot.cards[1].data.rate as number | undefined}
-                repayAmount={
-                  snapshot.cards[1].data.repayAmount as number | undefined
-                }
-              />
-            </FlowCard>
-            <FlowCard
-              index={3}
-              total={isDefault ? 6 : 5}
-              name={cardLabels[2]!}
-              status={snapshot.cards[2].status}
-              icon="◆"
-            >
-              <FundedCardContent
-                txHash={
-                  snapshot.cards[2].data.txHash as string | null | undefined
-                }
-                dueAt={snapshot.cards[2].data.dueAt as string | undefined}
-              />
-            </FlowCard>
-            <FlowCard
-              index={4}
-              total={isDefault ? 6 : 5}
-              name={cardLabels[3]!}
-              status={
-                isDefault && snapshot.cards[4].status === "FAILED"
-                  ? "FAILED"
-                  : snapshot.cards[3].status
-              }
-              icon="⏱"
-            >
-              <CommittedCardContent
-                status={snapshot.cards[3].status}
-                repaymentSessionId={
-                  snapshot.cards[3].data.repaymentSessionId as
-                    | string
-                    | undefined
-                }
-                reason={snapshot.cards[3].data.reason as string | undefined}
-              />
-            </FlowCard>
-            <FlowCard
-              index={5}
-              total={isDefault ? 6 : 5}
-              name={cardLabels[4]!}
-              status={snapshot.cards[4].status}
-              icon="🔒"
-            >
-              <RepaidCardContent
-                status={snapshot.cards[4].status}
-                txHash={
-                  snapshot.cards[4].data.txHash as string | null | undefined
-                }
-                reason={snapshot.cards[4].data.reason as string | undefined}
-              />
-            </FlowCard>
-            {isDefault && (
-              <FlowCard
-                index={6}
-                total={6}
-                name="BLACKLISTED"
-                status={
-                  snapshot.cards[4].status === "FAILED" ||
-                  snapshot.cards[4].status === "DONE"
-                    ? "FAILED"
-                    : "WAITING"
-                }
-                icon="🚫"
-              >
-                <div className="text-xs text-danger leading-relaxed">
-                  Score crashed
-                  <br />
-                  agent suspended
-                </div>
-              </FlowCard>
-            )}
-          </div>
-        </section>
-        )}
-
         <Footer />
-      </div>
-    </main>
+        </div>
+      </motion.main>
+    </>
   );
 }
 
-function EscrowCard({
-  index,
-  total = 3,
-  name,
-  done,
-  active = false,
-  icon,
-  children,
+function BeatBanner({
+  beat,
 }: {
-  index: number;
-  total?: number;
-  name: string;
-  done: boolean;
-  active?: boolean;
-  icon: string;
-  children: React.ReactNode;
+  beat: { title: string; desc: string } | null;
 }) {
-  const tone = done
-    ? "border-accent bg-accent-soft text-ink"
-    : active
-      ? "border-accent/60 bg-panel-card text-ink animate-pulse-slow"
-      : "border-panel-border bg-panel-card text-ink-dimmer";
   return (
-    <div
-      className={`rounded-md border transition-all duration-300 p-4 h-32 flex flex-col ${tone}`}
-    >
-      <div className="flex items-baseline justify-between mb-2">
-        <span className="text-[10px] font-mono-tight uppercase tracking-widest text-ink-dimmer">
-          {index}/{total}
-        </span>
-        <span className="text-base">{icon}</span>
-      </div>
-      <div className="font-mono-tight text-[11px] uppercase tracking-wider text-ink-dim mb-2">
-        {name}
-      </div>
-      <div className="text-xs leading-relaxed">{children}</div>
+    <div className="mb-6 min-h-[88px]">
+      <AnimatePresence mode="wait">
+        {beat ? (
+          <motion.div
+            key={beat.title}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.35 }}
+            className="rounded-xl border border-accent/40 bg-gradient-to-r from-accent/15 via-accent/5 to-transparent backdrop-blur px-6 py-4 shadow-lg shadow-accent/10"
+          >
+            <div className="text-[10px] uppercase tracking-[0.3em] text-accent font-semibold mb-1">
+              ▌ Live narrative
+            </div>
+            <div className="text-lg md:text-xl font-bold text-ink leading-snug">
+              {beat.title}
+            </div>
+            <div className="text-sm text-ink-dim mt-1 leading-relaxed">
+              {beat.desc}
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="idle"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="rounded-xl border border-white/10 bg-white/[0.03] px-6 py-4"
+          >
+            <div className="text-[10px] uppercase tracking-[0.3em] text-ink-dimmer font-semibold mb-1">
+              ▌ Demo idle
+            </div>
+            <div className="text-base text-ink-dim">
+              Click a Run Loan button to start. Each step will narrate live
+              and the graph below will animate in lock-step.
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

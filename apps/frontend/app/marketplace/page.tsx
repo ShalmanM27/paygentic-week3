@@ -1,13 +1,13 @@
 "use client";
 
-// V2 — agent marketplace. Moved from / to /marketplace; the landing
-// page now lives at /. Same agent grid + how-it-works + activity
-// pulse, refreshed with glass cards.
+// V3 — agent marketplace with cursor-tilt cards + cursor-following
+// glow + emoji wobble + staggered entrance. Glass identity, motion
+// everywhere.
 
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
-import { Cog, Lock, ShieldCheck } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowRight, Cog, Lock, ShieldCheck } from "lucide-react";
 import { credit } from "../../lib/credit-client";
 import { useCreditEvents } from "../../lib/sse";
 import { Card, USDC } from "../../components/ui";
@@ -110,46 +110,44 @@ export default function MarketplacePage() {
   }, [events]);
 
   return (
-    <main className="min-h-screen p-6 max-w-7xl mx-auto">
-      <PageHeader
-        crumbs={[
-          { href: "/", label: "Home" },
-          { label: "Marketplace" },
-        ]}
-      />
-
-      <header className="flex items-end justify-between mb-8 gap-4 flex-wrap">
-        <div>
-          <div className="text-[11px] uppercase tracking-[0.25em] text-accent font-semibold mb-2">
-            Marketplace · USDC on Base
-          </div>
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
-            <span className="bg-gradient-to-r from-accent via-info to-warn bg-clip-text text-transparent">
-              Available agents
-            </span>
-          </h1>
-        </div>
-        {lastActivity && (
-          <span className="hidden md:inline-flex text-xs text-ink-dim font-mono-tight items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-            Last activity: {lastActivity.text} ·{" "}
-            {Math.max(0, Math.round((Date.now() - lastActivity.ts) / 1000))}s
-            ago
-          </span>
-        )}
-      </header>
-
-      {/* Main-demo cue */}
-      <div className="rounded-xl border border-accent/30 bg-accent-soft px-5 py-4 mb-8 flex items-start gap-3">
-        <span className="text-xl mt-0.5" aria-hidden>
-          👇
-        </span>
-        <p className="text-sm text-ink leading-relaxed">
-          <strong className="text-accent">This is the main demo.</strong>{" "}
-          Click any agent below, submit a task, and watch the full escrow
-          lifecycle live.
-        </p>
-      </div>
+    <>
+      <PageHeader />
+      <motion.main
+        className="min-h-screen relative"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+      >
+        <div className="max-w-7xl mx-auto px-6 py-16">
+          <header className="flex items-end justify-between mb-12 gap-4 flex-wrap">
+            <div>
+              <div className="text-eyebrow mb-3">
+                Marketplace · USDC on Base
+              </div>
+              <h1 className="text-display text-white mb-5">
+                Available <em>agents.</em>
+              </h1>
+              <p className="text-body max-w-2xl">
+                Six AI agents. Pay in USDC. Get verified output. Money sits
+                in escrow until delivery.
+              </p>
+            </div>
+            {lastActivity && (
+              <motion.span
+                className="hidden md:inline-flex text-mono-micro items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 backdrop-blur"
+                animate={{ scale: [1, 1.03, 1] }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+              >
+                <span className="relative flex w-2 h-2">
+                  <span className="absolute inline-flex w-full h-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+                  <span className="relative inline-flex w-2 h-2 rounded-full bg-emerald-400" />
+                </span>
+                {agents.length} agents · last activity {lastActivity.text} ·{" "}
+                {Math.max(0, Math.round((Date.now() - lastActivity.ts) / 1000))}s
+                ago
+              </motion.span>
+            )}
+          </header>
 
       {/* AGENT GRID */}
       <section>
@@ -164,18 +162,35 @@ export default function MarketplacePage() {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {agents.map((a) => (
-              <AgentCard key={a.agentId} agent={a} />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {agents.map((a, i) => (
+              <AgentCard key={a.agentId} agent={a} index={i} />
             ))}
           </div>
         )}
       </section>
 
+      {/* HOST CTA */}
+      <section className="mt-24">
+        <div className="text-eyebrow mb-3">Want to host?</div>
+        <h2 className="text-editorial text-white mb-3 max-w-2xl">
+          Add your <em>agent.</em>
+        </h2>
+        <p className="text-body max-w-xl mb-6">
+          Register a new agent, pay $0.005 USDC monthly rent, and start
+          earning from buyers. Same escrow + credit lines as the built-ins.
+        </p>
+        <Link href="/add-agent" className="btn-primary">
+          Register an agent
+          <span aria-hidden>→</span>
+        </Link>
+      </section>
+
       {/* HOW IT WORKS — glass cards */}
-      <section className="mt-16">
-        <h2 className="text-xs font-medium uppercase tracking-wider text-ink-dim mb-4">
-          How it works
+      <section className="mt-24">
+        <div className="text-eyebrow mb-3">How it works</div>
+        <h2 className="text-editorial text-white mb-8 max-w-3xl">
+          Three steps. <em>Zero humans.</em>
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative">
           <HowGlassCard
@@ -208,80 +223,182 @@ export default function MarketplacePage() {
         </div>
       </section>
 
-      <Footer />
-    </main>
+          <Footer />
+        </div>
+      </motion.main>
+    </>
   );
 }
 
-function AgentCard({ agent }: { agent: AgentRegistryEntry }) {
+function AgentCard({
+  agent,
+  index,
+}: {
+  agent: AgentRegistryEntry;
+  index: number;
+}) {
   const [g0, g1] = AGENT_GRADIENTS[agent.agentId] ?? FALLBACK_GRAD;
   const taskCount = deterministicCount(agent.agentId);
   const reviews = deterministicReviews(agent.agentId);
   const rating = deterministicRating(agent.agentId);
 
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const [tilt, setTilt] = useState<{ rx: number; ry: number }>({
+    rx: 0,
+    ry: 0,
+  });
+  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
+  const [hovered, setHovered] = useState(false);
+
+  function onMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+    const rx = -((y / r.height) - 0.5) * 8;
+    const ry = ((x / r.width) - 0.5) * 8;
+    setTilt({ rx, ry });
+    setCursor({ x, y });
+  }
+  function onMouseLeave() {
+    setTilt({ rx: 0, ry: 0 });
+    setCursor(null);
+    setHovered(false);
+  }
+
   return (
     <motion.div
-      whileHover={{ y: -4 }}
-      transition={{ type: "spring", stiffness: 300, damping: 25 }}
+      ref={wrapperRef}
+      onMouseMove={onMouseMove}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={onMouseLeave}
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-50px" }}
+      transition={{
+        delay: index * 0.08,
+        duration: 0.55,
+        ease: "easeOut",
+      }}
+      animate={{
+        rotateX: tilt.rx,
+        rotateY: tilt.ry,
+      }}
+      style={{
+        transformStyle: "preserve-3d",
+        perspective: 1000,
+        willChange: "transform",
+      }}
     >
       <Link
         href={`/agent/${encodeURIComponent(agent.agentId)}`}
-        className="block group relative overflow-hidden rounded-lg border border-panel-border bg-panel-card hover:border-accent/40 transition-colors"
+        className="block group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl hover:border-white/20 transition-all duration-300"
+        style={{
+          boxShadow: hovered
+            ? `0 30px 60px -20px ${g0}55, 0 0 0 1px rgba(255,255,255,0.05)`
+            : "0 10px 30px -15px rgba(0,0,0,0.4)",
+          transition: "box-shadow 350ms ease",
+        }}
       >
-        <div
-          className="relative h-32 flex items-center justify-center"
-          style={{
-            background: `linear-gradient(135deg, ${g0}, ${g1})`,
-          }}
-        >
-          <span className="text-6xl drop-shadow-lg" aria-hidden>
-            {agent.emoji}
-          </span>
+        {/* Cursor-following radial glow overlay */}
+        {cursor && (
           <div
-            className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+            className="pointer-events-none absolute inset-0 transition-opacity duration-300"
             style={{
-              background:
-                "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.25), transparent 70%)",
+              background: `radial-gradient(420px circle at ${cursor.x}px ${cursor.y}px, rgba(16,185,129,0.18), transparent 45%)`,
+              opacity: hovered ? 1 : 0,
             }}
           />
+        )}
+        {/* Gradient band header — emoji wobbles on hover */}
+        <div
+          className="relative h-36 flex items-center justify-center overflow-hidden"
+          style={{
+            background: `linear-gradient(135deg, ${g0}, ${g1})`,
+            backgroundSize: "180% 180%",
+            backgroundPosition: hovered ? "100% 100%" : "0% 0%",
+            transition: "background-position 1.5s ease-in-out",
+          }}
+        >
+          {/* inner shadow blending into card body */}
+          <div
+            aria-hidden
+            className="absolute inset-x-0 bottom-0 h-12 pointer-events-none"
+            style={{
+              background:
+                "linear-gradient(180deg, transparent, rgba(0,0,0,0.4))",
+            }}
+          />
+          <motion.span
+            className="text-7xl drop-shadow-lg select-none"
+            aria-hidden
+            animate={hovered ? { rotate: [0, -6, 6, -3, 0] } : { rotate: 0 }}
+            transition={{ duration: 0.8, ease: "easeInOut" }}
+            style={{ willChange: "transform" }}
+          >
+            {agent.emoji}
+          </motion.span>
         </div>
 
-        <div className="p-4 space-y-3">
+        <div className="relative p-5 space-y-3.5">
           <div>
             <div className="flex items-baseline justify-between gap-2">
               <h3 className="text-xl font-semibold tracking-tight">
                 {agent.displayName}
               </h3>
-              <span className="text-[10px] uppercase tracking-widest text-ink-dimmer">
+              <span className="text-[10px] uppercase tracking-widest text-ink-dimmer font-mono-tight">
                 {agent.category}
               </span>
             </div>
-            <p className="text-xs text-ink-dim line-clamp-2 mt-1 min-h-[2rem]">
+            <p className="text-xs text-ink-dim line-clamp-2 mt-1.5 min-h-[2rem]">
               {agent.description}
             </p>
           </div>
 
-          <div className="flex items-baseline justify-between border-t border-panel-border pt-3">
+          <div className="flex items-baseline justify-between border-t border-white/10 pt-3">
             <USDC
               amount={agent.pricingUsdc}
-              className="text-xl text-accent font-bold"
+              className="text-2xl text-accent font-bold font-mono-tight"
             />
-            <span className="text-[10px] text-ink-dimmer">
+            <span className="text-[10px] text-ink-dimmer font-mono-tight">
               ✓ {taskCount} completed
             </span>
           </div>
 
           <div className="flex items-center justify-between text-xs">
             <Stars rating={rating} reviews={reviews} />
-            <span className="text-accent flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+            <span className="text-accent flex items-center gap-1.5">
+              <motion.span
+                className="w-1.5 h-1.5 rounded-full bg-accent"
+                animate={{
+                  scale: [1, 1.5, 1],
+                  opacity: [0.6, 1, 0.6],
+                }}
+                transition={{
+                  duration: 2,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
+                style={{ willChange: "transform, opacity" }}
+              />
               Available
             </span>
           </div>
 
-          <div className="w-full text-center px-3 py-2 rounded text-sm font-medium border border-panel-borderStrong text-ink group-hover:bg-accent group-hover:text-black group-hover:border-accent transition-colors">
-            <span className="group-hover:hidden">Use this agent →</span>
-            <span className="hidden group-hover:inline">↗ Submit a task</span>
+          <div className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-sm font-medium border border-white/15 text-ink group-hover:bg-accent group-hover:text-black group-hover:border-accent transition-colors">
+            <span>Use this agent</span>
+            <motion.span
+              animate={{ x: hovered ? 4 : 0 }}
+              transition={{
+                type: "spring",
+                stiffness: 300,
+                damping: 22,
+              }}
+              style={{ display: "inline-flex", willChange: "transform" }}
+            >
+              <ArrowRight size={16} />
+            </motion.span>
           </div>
         </div>
       </Link>

@@ -16,20 +16,30 @@
     background: rgba(0, 217, 160, 0.3);
     color: #fff;
   }
-  /* scrollbar — subtle dark */
+  /* scrollbar — accent gradient thumb on transparent track */
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
   ::-webkit-scrollbar-track {
-    background: #0a0a0a;
+    background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #262626;
+    background: linear-gradient(180deg, #10b981 0%, #06b6d4 100%);
     border-radius: 4px;
+    border: 2px solid #0a0a0a;
+    background-clip: padding-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #404040;
+    background: linear-gradient(180deg, #34d399 0%, #22d3ee 100%);
+    background-clip: padding-box;
+  }
+
+  /* Global focus ring */
+  :focus-visible {
+    outline: 2px solid rgba(16, 185, 129, 0.6);
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 
   /* ── Light theme — opt-in via <html class="light"> ──────────────────
@@ -76,6 +86,100 @@
     background: rgba(0, 184, 138, 0.3);
     color: #000;
   }
+
+  /* ── Light-mode contrast fixes ────────────────────────────────────
+   * The dark identity uses a lot of `text-white`, `text-gray-*`, and
+   * `bg-white/[X]` translucent surfaces. On a light page (#fafafa)
+   * those vanish. The block below inverts every offender so the same
+   * markup reads correctly in both themes without per-page edits.
+   */
+
+  /* Direct text colors */
+  html.light .text-white { color: #0a0a0a !important; }
+  html.light .text-gray-100 { color: #1f2937 !important; }
+  html.light .text-gray-200 { color: #1f2937 !important; }
+  html.light .text-gray-300 { color: #374151 !important; }
+  html.light .text-gray-400 { color: #4b5563 !important; }
+  html.light .text-gray-500 { color: #6b7280 !important; }
+  html.light .text-emerald-300 { color: #047857 !important; }
+  html.light .text-emerald-400 { color: #059669 !important; }
+  html.light .text-cyan-300 { color: #0e7490 !important; }
+  html.light .text-cyan-400 { color: #0891b2 !important; }
+  html.light .text-info { color: #2563eb !important; }
+
+  /* Translucent white surfaces → translucent black */
+  html.light [class*="bg-white/"] {
+    background-color: rgba(0, 0, 0, 0.045) !important;
+  }
+  html.light [class*="border-white/"] {
+    border-color: rgba(0, 0, 0, 0.10) !important;
+  }
+  html.light [class*="divide-white/"] > * {
+    border-color: rgba(0, 0, 0, 0.08) !important;
+  }
+  html.light [class*="ring-white/"] {
+    --tw-ring-color: rgba(0, 0, 0, 0.15) !important;
+  }
+
+  /* Translucent black surfaces — flip in light mode so they read as
+     subtle white panels instead of darkening the whole page. */
+  html.light [class*="bg-black/"] {
+    background-color: rgba(255, 255, 255, 0.55) !important;
+  }
+
+  /* Editorial design tokens */
+  html.light .text-eyebrow { color: #4b5563 !important; }
+  html.light .text-body { color: #4b5563 !important; }
+  html.light .text-mono-micro { color: #6b7280 !important; }
+
+  /* Glass surface */
+  html.light .glass-surface {
+    background: rgba(0, 0, 0, 0.04) !important;
+    border-color: rgba(0, 0, 0, 0.10) !important;
+  }
+  html.light .glass-surface:hover {
+    background: rgba(0, 0, 0, 0.06) !important;
+    border-color: rgba(0, 0, 0, 0.22) !important;
+  }
+
+  /* Buttons */
+  html.light .btn-secondary {
+    border-color: rgba(0, 0, 0, 0.18);
+    background: rgba(0, 0, 0, 0.03);
+    color: #0a0a0a;
+  }
+  html.light .btn-secondary:hover {
+    border-color: rgba(0, 0, 0, 0.32);
+    background: rgba(0, 0, 0, 0.06);
+  }
+
+  /* Shimmer sweep — the white-to-transparent reflection is invisible
+     on a dark CTA in light mode (the gradient stays bright but the
+     base button is a green pill, so we keep it). Just dial it down. */
+  html.light .cta-shimmer::before {
+    background: linear-gradient(
+      120deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.55) 50%,
+      transparent 70%
+    );
+  }
+
+  /* Marquee edge fades — the dark `linear-gradient(...,#0a0a0a,...)`
+     bookends become hard black bars in light mode. Override by class. */
+  html.light .marquee-fade-left {
+    background: linear-gradient(90deg, #fafafa, transparent) !important;
+  }
+  html.light .marquee-fade-right {
+    background: linear-gradient(270deg, #fafafa, transparent) !important;
+  }
+
+  /* Page header bg — theme-aware via class so the inline-styled
+     motion value can opt out via this override class. */
+  html.light .header-glass-light-fallback {
+    background: rgba(255, 255, 255, 0.70) !important;
+    border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+  }
 }
 
 @layer utilities {
@@ -83,5 +187,205 @@
     font-family: var(--font-mono), ui-monospace, monospace;
     font-variant-ligatures: none;
     letter-spacing: -0.01em;
+  }
+
+  /* ─── Editorial typography tokens ──────────────────────────────────
+   * KEY MOVE: every <em> nested inside a heading renders italic +
+   * accent gradient. That single rule is the typography signature.
+   */
+  .text-display {
+    font-size: clamp(3rem, 7vw, 6rem);
+    line-height: 0.95;
+    letter-spacing: -0.04em;
+    font-weight: 600;
+  }
+  .text-display em,
+  .text-editorial em {
+    font-style: italic;
+    font-weight: 500;
+    background: linear-gradient(135deg, #34d399 0%, #38bdf8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    /* Ensure each em paints its own gradient even when the parent
+       does not — no parent-clipping dependency. */
+  }
+  .text-editorial {
+    font-size: clamp(2rem, 4vw, 3.25rem);
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+    font-weight: 600;
+  }
+  .text-eyebrow {
+    font-size: 0.75rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    font-weight: 500;
+    color: rgb(156 163 175);
+  }
+  .text-body {
+    font-size: 1.125rem;
+    line-height: 1.65;
+    color: rgb(156 163 175);
+  }
+  .text-mono-micro {
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-size: 0.6875rem;
+    letter-spacing: 0.05em;
+    text-transform: lowercase;
+    color: rgb(156 163 175);
+  }
+  /* Glass surface — used by every card across the app. */
+  .glass-surface {
+    background: rgba(255, 255, 255, 0.025);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    transition: all 300ms ease;
+  }
+  .glass-surface:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+  /* Primary CTA — gradient pill with inner highlight + hover glow. */
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, #6ee7b7, #10b981);
+    color: #000;
+    font-weight: 500;
+    padding: 0.875rem 1.75rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    transition: all 200ms ease;
+  }
+  .btn-primary:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.25),
+      0 0 40px rgba(52, 211, 153, 0.4);
+  }
+  .btn-primary:active {
+    transform: scale(0.97);
+  }
+  /* Secondary — ghost / glass. */
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: #fff;
+    padding: 0.875rem 1.75rem;
+    transition: all 200ms ease;
+  }
+  .btn-secondary:hover {
+    border-color: rgba(255, 255, 255, 0.30);
+    background: rgba(255, 255, 255, 0.06);
+  }
+  /* Animated headline gradient — bg-position cycles across an extra-
+     wide gradient over 8s, infinite. */
+  .gradient-text-anim {
+    background: linear-gradient(
+      90deg,
+      #34d399,
+      #06b6d4,
+      #8b5cf6,
+      #f59e0b,
+      #34d399
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: gradient-pan 8s ease-in-out infinite;
+  }
+  @keyframes gradient-pan {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  /* Diagonal shimmer sweep — for primary CTAs. */
+  .cta-shimmer {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .cta-shimmer::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      120deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.35) 50%,
+      transparent 70%
+    );
+    transform: translateX(-100%);
+    animation: cta-shimmer-pan 6s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 1;
+  }
+  @keyframes cta-shimmer-pan {
+    0%, 90%, 100% { transform: translateX(-100%); }
+    45%, 55% { transform: translateX(100%); }
+  }
+  /* Bobbing pill animations — three offsets so siblings desync. */
+  .bob-a { animation: bob-y 3s ease-in-out infinite; }
+  .bob-b { animation: bob-y 4.2s ease-in-out infinite 0.4s; }
+  .bob-c { animation: bob-y 5.1s ease-in-out infinite 0.8s; }
+  @keyframes bob-y {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+  /* Marquee — horizontal scrolling row used on the landing page's
+     live-activity strip. The track holds the loop content twice so
+     the animation can wrap seamlessly. */
+  .marquee-row {
+    overflow: hidden;
+    width: 100%;
+  }
+  .marquee-track {
+    width: max-content;
+    animation: marquee-x 30s linear infinite;
+  }
+  @keyframes marquee-x {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  /* Skeleton shimmer — sweeps a brighter band across a translucent
+     placeholder. Used by the <Skeleton/> primitive in components/ui. */
+  .animate-skeleton-shimmer {
+    animation: skeleton-shimmer 1.6s ease-in-out infinite;
+  }
+  @keyframes skeleton-shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  /* Underline-grow nav hover — applied via group-hover on wrapper */
+  .nav-underline {
+    position: relative;
+  }
+  .nav-underline::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -2px;
+    height: 2px;
+    width: 0;
+    background: linear-gradient(90deg, #34d399, #06b6d4);
+    transform: translateX(-50%);
+    transition: width 220ms ease-out;
+  }
+  .nav-underline:hover::after,
+  .nav-underline[data-active="true"]::after {
+    width: 70%;
   }
 }
